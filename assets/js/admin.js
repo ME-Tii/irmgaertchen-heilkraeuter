@@ -137,7 +137,7 @@ function renderDashboard() {
 
   document.getElementById("statTotal").textContent = orders.length;
   document.getElementById("statOpen").textContent = orders.filter((o) => o.status !== "Abgeschlossen").length;
-  const revenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const revenue = orders.reduce((sum, o) => sum + (o.refunded ? 0 : o.total || 0), 0);
   document.getElementById("statRevenue").textContent = fmtMoney(revenue);
 
   if (orders.length === 0) {
