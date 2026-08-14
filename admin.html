@@ -113,7 +113,7 @@
 
       <div id="inventory" class="d-none">
         <div class="alert alert-info">
-          <i class="bi bi-info-circle"></i> Tragen Sie hier den aktuellen Lagerbestand ein. Der Shop zeigt Kunden an, ob ein Artikel verfügbar ist ("Verfügbar", "Nur noch X" oder "Ausverkauft"). Bei jeder Bestellung wird der Bestand automatisch reduziert. Ohne Eintrag gilt ein Artikel als unbegrenzt verfügbar.
+          <i class="bi bi-info-circle"></i> Tragen Sie hier den aktuellen Lagerbestand und den Verkaufspreis ein. Der Shop zeigt Kunden an, ob ein Artikel verfügbar ist ("Verfügbar", "Nur noch X" oder "Ausverkauft"). Bei jeder Bestellung wird der Bestand automatisch reduziert. Ohne Bestandseintrag gilt ein Artikel als unbegrenzt verfügbar. Über das Bildsymbol laden Sie ein Produktfoto hoch.
         </div>
 
         <div class="card mb-4">
@@ -146,6 +146,10 @@
                 <input type="text" class="form-control" id="apDesc" placeholder="Kurze Produktbeschreibung">
               </div>
               <div class="col-12">
+                <label for="apImage" class="form-label">Bild (optional)</label>
+                <input type="file" class="form-control" id="apImage" accept="image/*">
+              </div>
+              <div class="col-12">
                 <button type="submit" class="btn btn-irm"><i class="bi bi-plus-lg"></i> Anlegen</button>
               </div>
             </form>
@@ -161,6 +165,8 @@
                 <th>Kategorie</th>
                 <th>Aktueller Bestand</th>
                 <th>Neuer Bestand</th>
+                <th>Preis (€)</th>
+                <th>Bild</th>
                 <th class="text-end">Aktion</th>
               </tr>
             </thead>

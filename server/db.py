@@ -56,6 +56,7 @@ SQLITE_SCHEMA = [
         category TEXT NOT NULL DEFAULT 'Sonstiges',
         price_cents INTEGER NOT NULL,
         "desc" TEXT NOT NULL DEFAULT '',
+        image TEXT NOT NULL DEFAULT '',
         stock INTEGER,
         custom INTEGER NOT NULL DEFAULT 0,
         visible INTEGER NOT NULL DEFAULT 1
@@ -110,6 +111,7 @@ PG_SCHEMA = [
         category TEXT NOT NULL DEFAULT 'Sonstiges',
         price_cents INTEGER NOT NULL,
         "desc" TEXT NOT NULL DEFAULT '',
+        image TEXT NOT NULL DEFAULT '',
         stock INTEGER,
         custom INTEGER NOT NULL DEFAULT 0,
         visible INTEGER NOT NULL DEFAULT 1
@@ -175,6 +177,17 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE products ADD COLUMN image TEXT NOT NULL DEFAULT ''"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    for slug, info in CATALOG.items():
+        conn.execute(
+            _sql("UPDATE products SET image = %s WHERE slug = %s AND (image = '' OR image IS NULL)"),
+            (info.get("image", ""), slug),
+        )
+    conn.commit()
     seed_products(conn)
     conn.commit()
     conn.close()
@@ -186,9 +199,9 @@ def seed_products(conn):
         return
     for slug, info in CATALOG.items():
         conn.execute(
-            _sql("INSERT INTO products (slug, name, category, price_cents, \"desc\", stock, custom, visible) "
-                 "VALUES (%s, %s, %s, %s, %s, %s, 0, 1)"),
-            (slug, info["name"], info["category"], info["price_cents"], info.get("desc", ""), None),
+            _sql("INSERT INTO products (slug, name, category, price_cents, \"desc\", image, stock, custom, visible) "
+                 "VALUES (%s, %s, %s, %s, %s, %s, %s, 0, 1)"),
+            (slug, info["name"], info["category"], info["price_cents"], info.get("desc", ""), info.get("image", ""), None),
         )
 
 
@@ -291,23 +304,30 @@ def get_product(slug):
     return row_to_dict(row)
 
 
-def add_product(slug, name, category, price_cents, stock=None, desc=""):
+def add_product(slug, name, category, price_cents, stock=None, desc="", image=""):
     conn = get_conn()
     conn.execute(
-        _sql("INSERT INTO products (slug, name, category, price_cents, \"desc\", stock, custom, visible) "
-             "VALUES (%s, %s, %s, %s, %s, %s, 1, 1)"),
-        (slug, name, category, price_cents, desc, stock),
+        _sql("INSERT INTO products (slug, name, category, price_cents, \"desc\", image, stock, custom, visible) "
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 1)"),
+        (slug, name, category, price_cents, desc, image, stock),
     )
     conn.commit()
     conn.close()
 
 
-def update_product(slug, name, category, price_cents, stock, desc=""):
+def update_product(slug, name, category, price_cents, stock, desc="", image=""):
     conn = get_conn()
     conn.execute(
-        _sql("UPDATE products SET name = %s, category = %s, price_cents = %s, stock = %s, \"desc\" = %s WHERE slug = %s"),
-        (name, category, price_cents, stock, desc, slug),
+        _sql("UPDATE products SET name = %s, category = %s, price_cents = %s, stock = %s, \"desc\" = %s, image = %s WHERE slug = %s"),
+        (name, category, price_cents, stock, desc, image, slug),
     )
+    conn.commit()
+    conn.close()
+
+
+def set_product_image(slug, image):
+    conn = get_conn()
+    conn.execute(_sql("UPDATE products SET image = %s WHERE slug = %s"), (image, slug))
     conn.commit()
     conn.close()
 

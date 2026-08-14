@@ -161,7 +161,8 @@ function showToast(message) {
   wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
 }
 
-function imgFor(id) {
+function imgFor(id, p) {
+  if (p && p.image) return "assets/img/" + p.image;
   const labels = {
     salbei: "salbei.jpg",
     thymian: "thymian.jpg",
@@ -222,7 +223,7 @@ function renderShop(category) {
       return `
       <div class="col">
         <div class="card card-product h-100">
-          <img src="${imgFor(p.id)}" class="card-img-top" alt="${p.name}">
+          <img src="${imgFor(p.id, p)}" class="card-img-top" alt="${p.name}">
           <span class="badge badge-bio position-absolute top-0 start-0 m-2">Naturland Bio</span>
           <div class="card-body d-flex flex-column">
             <h5 class="card-title">${p.name}</h5>
@@ -268,7 +269,7 @@ function renderCart() {
       const lineTotal = p.price * i.qty;
       return `
         <tr>
-          <td><img src="${imgFor(i.id)}" alt="${p.name}" style="width:60px;height:45px;object-fit:cover;" class="rounded"></td>
+          <td><img src="${imgFor(i.id, p)}" alt="${p.name}" style="width:60px;height:45px;object-fit:cover;" class="rounded"></td>
           <td>${p.name}</td>
           <td>${p.price.toFixed(2).replace(".", ",")} €</td>
           <td>

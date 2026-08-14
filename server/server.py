@@ -38,6 +38,8 @@ ADMIN_PASSWORD = os.environ.get("IRM_ADMIN_PASSWORD", "")
 stripe.api_key = STRIPE_SECRET_KEY
 
 SHOP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+IMG_DIR = os.path.join(SHOP_DIR, "assets", "img")
+ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 app = Flask(__name__, static_folder=SHOP_DIR, static_url_path="")
 
@@ -231,6 +233,7 @@ def products():
                 "category": p["category"],
                 "price": round(p["price_cents"] / 100, 2),
                 "desc": p["desc"] or "",
+                "image": p["image"] or "",
                 "stock": p["stock"],
                 "custom": bool(p["custom"]),
             }
@@ -591,6 +594,7 @@ def admin_products():
                 "category": p["category"],
                 "price": round(p["price_cents"] / 100, 2),
                 "desc": p["desc"] or "",
+                "image": p["image"] or "",
                 "stock": p["stock"],
                 "custom": bool(p["custom"]),
                 "visible": bool(p["visible"]),
@@ -616,7 +620,7 @@ def admin_add_product():
     if db.get_product(slug):
         return err("Diese Artikel-ID existiert bereits.", 400)
     stock = data.get("stock")
-    db.add_product(slug, name, (data.get("category") or "Sonstiges").strip(), price_cents, stock, (data.get("desc") or "").strip())
+    db.add_product(slug, name, (data.get("category") or "Sonstiges").strip(), price_cents, stock, (data.get("desc") or "").strip(), (data.get("image") or "").strip())
     return jsonify({"ok": True})
 
 
@@ -634,8 +638,32 @@ def admin_update_product(slug):
     price_cents = int(round(float(data.get("price", product["price_cents"] / 100)) * 100))
     stock = data["stock"] if "stock" in data else product["stock"]
     desc = (data.get("desc") if data.get("desc") is not None else product.get("desc") or "").strip()
-    db.update_product(slug, name, category, price_cents, stock, desc)
+    image = (data.get("image") if data.get("image") is not None else product.get("image") or "").strip()
+    db.update_product(slug, name, category, price_cents, stock, desc, image)
     return jsonify({"ok": True})
+
+
+@app.post("/api/admin/products/<slug>/image")
+def admin_upload_product_image(slug):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    product = db.get_product(slug)
+    if not product:
+        return err("Produkt nicht gefunden.", 404)
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return err("Keine Datei angehängt.", 400)
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXT:
+        return err("Nur JPG, PNG, WebP oder GIF erlaubt.", 400)
+    if file.content_length and file.content_length > 3 * 1024 * 1024:
+        return err("Bild zu groß (max. 3 MB).", 400)
+    filename = slug + ext
+    os.makedirs(IMG_DIR, exist_ok=True)
+    file.save(os.path.join(IMG_DIR, filename))
+    db.set_product_image(slug, filename)
+    return jsonify({"ok": True, "image": filename})
 
 
 @app.delete("/api/admin/products/<slug>")

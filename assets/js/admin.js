@@ -32,6 +32,20 @@ function adminApi(path, method, body) {
   );
 }
 
+function adminUpload(path, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = { Accept: "application/json" };
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (token) headers.Authorization = "Bearer " + token;
+  return fetch(path, { method: "POST", headers, body: fd }).then((res) =>
+    res.json().then((data) => {
+      if (!res.ok) throw new Error(data.error || "Upload fehlgeschlagen.");
+      return data;
+    })
+  );
+}
+
 function adminLoggedIn() {
   return !!localStorage.getItem(ADMIN_TOKEN_KEY);
 }
@@ -304,12 +318,17 @@ function renderInventory() {
           : cur <= 5
           ? '<span class="badge bg-warning text-dark">' + cur + "</span>"
           : '<span class="badge bg-success">' + cur + "</span>";
+      const imgSrc = p.image ? "assets/img/" + p.image : "assets/img/kraeutergarten.jpg";
       return (
         "<tr>" +
         "<td>" + esc(p.name) + (p.custom ? ' <span class="badge bg-info text-dark">eigen</span>' : "") + "</td>" +
         "<td><small class=\"text-muted\">" + esc(p.category) + "</small></td>" +
         "<td>" + badge + "</td>" +
         '<td style="max-width:130px;"><input type="number" min="0" step="1" class="form-control form-control-sm stock-input" data-id="' + esc(p.id) + '" placeholder="Anzahl" value="' + (cur === null ? "" : cur) + '"></td>' +
+        '<td style="max-width:110px;"><input type="number" min="0" step="0.1" class="form-control form-control-sm price-input" data-id="' + esc(p.id) + '" value="' + p.price.toFixed(2) + '"></td>' +
+        '<td class="text-nowrap"><img src="' + imgSrc + '" alt="Bild" style="width:44px;height:44px;object-fit:cover;" class="rounded me-2">' +
+        '<input type="file" accept="image/*" class="d-none img-file" data-id="' + esc(p.id) + '">' +
+        '<button class="btn btn-sm btn-outline-secondary img-upload" data-id="' + esc(p.id) + '" title="Bild hochladen"><i class="bi bi-image"></i></button></td>' +
         '<td class="text-end text-nowrap">' +
         '<button class="btn btn-sm btn-irm stock-save" data-id="' + esc(p.id) + '"><i class="bi bi-check-lg"></i> Speichern</button> ' +
         '<button class="btn btn-sm btn-outline-secondary stock-unlimited" data-id="' + esc(p.id) + '" title="Als unbegrenzt markieren"><i class="bi bi-infinity"></i></button> ' +
@@ -322,12 +341,17 @@ function renderInventory() {
 
   body.querySelectorAll(".stock-save").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const input = body.querySelector('.stock-input[data-id="' + btn.dataset.id + '"]');
-      const value = input ? input.value : "";
+      const stockInput = body.querySelector('.stock-input[data-id="' + btn.dataset.id + '"]');
+      const priceInput = body.querySelector('.price-input[data-id="' + btn.dataset.id + '"]');
+      const value = stockInput ? stockInput.value : "";
       const stock = value === "" ? null : Math.max(0, Math.floor(Number(value)) || 0);
-      adminApi("api/admin/products/" + encodeURIComponent(btn.dataset.id), "PATCH", { stock })
+      const payload = { stock };
+      if (priceInput && priceInput.value !== "") {
+        payload.price = Math.max(0, Number(priceInput.value) || 0);
+      }
+      adminApi("api/admin/products/" + encodeURIComponent(btn.dataset.id), "PATCH", payload)
         .then(() => {
-          showToast("Bestand aktualisiert.");
+          showToast("Bestand und Preis gespeichert.");
           return loadInventory();
         })
         .then(renderInventory)
@@ -339,6 +363,26 @@ function renderInventory() {
       adminApi("api/admin/products/" + encodeURIComponent(btn.dataset.id), "PATCH", { stock: null })
         .then(() => {
           showToast("Als unbegrenzt markiert.");
+          return loadInventory();
+        })
+        .then(renderInventory)
+        .catch((err) => showToast(err.message));
+    });
+  });
+  body.querySelectorAll(".img-upload").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = body.querySelector('.img-file[data-id="' + btn.dataset.id + '"]');
+      if (input) input.click();
+    });
+  });
+  body.querySelectorAll(".img-file").forEach((input) => {
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const id = input.dataset.id;
+      adminUpload("api/admin/products/" + encodeURIComponent(id) + "/image", file)
+        .then(() => {
+          showToast("Bild gespeichert.");
           return loadInventory();
         })
         .then(renderInventory)
@@ -408,6 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       const stock = document.getElementById("apStock").value;
+      const imageInput = document.getElementById("apImage");
       adminApi("api/admin/products", "POST", {
         id: id,
         name: name,
@@ -416,6 +461,11 @@ document.addEventListener("DOMContentLoaded", () => {
         stock: stock === "" ? null : Number(stock),
         desc: document.getElementById("apDesc").value.trim(),
       })
+        .then((data) => {
+          const file = imageInput && imageInput.files && imageInput.files[0];
+          if (!file) return Promise.resolve(data);
+          return adminUpload("api/admin/products/" + encodeURIComponent(id) + "/image", file);
+        })
         .then(() => {
           addProductForm.reset();
           showToast("Artikel " + name + " angelegt.");
