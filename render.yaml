@@ -1,0 +1,48 @@
+# Render Blueprint – https://render.com/docs/blueprint-spec
+# Nutzung: Repo auf GitHub pushen, dann in Render:
+#   New + -> Blueprint -> Repo auswählen.
+# Oder den Blueprint direkt mit diesem Link öffnen:
+#   https://render.com/deploy?repo=<REPO_URL>
+
+services:
+  - type: web
+    name: irmgaertchen-shop
+    runtime: python
+    plan: free
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: irmgaertchen-db
+          property: connectionString
+      - key: DOMAIN
+        value: https://irmgaertchen-shop.onrender.com
+      - key: IRM_ADMIN_USERNAME
+        value: admin
+      - key: IRM_ADMIN_PASSWORD
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+
+databases:
+  - name: irmgaertchen-db
+    plan: free
+    databaseName: irmgaertchen
+    user: irmgaertchen

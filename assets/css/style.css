@@ -1,0 +1,132 @@
+:root {
+  --irm-green: #3f6b3b;
+  --irm-green-dark: #2f4f2c;
+  --irm-green-light: #e8f0e4;
+  --irm-gold: #c9a227;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #2b2b2b;
+  background-color: #faf9f5;
+}
+
+h1, h2, h3, h4, h5, .navbar-brand {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.navbar-irm {
+  background-color: var(--irm-green);
+}
+
+.navbar-irm .navbar-brand,
+.navbar-irm .nav-link {
+  color: #fff;
+}
+
+.navbar-irm .nav-link:hover,
+.navbar-irm .nav-link.active {
+  color: var(--irm-gold);
+}
+
+.navbar-irm .navbar-toggler {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-irm {
+  background-color: var(--irm-green);
+  border-color: var(--irm-green);
+  color: #fff;
+}
+
+.btn-irm:hover {
+  background-color: var(--irm-green-dark);
+  border-color: var(--irm-green-dark);
+  color: #fff;
+}
+
+.btn-outline-irm {
+  border-color: var(--irm-green);
+  color: var(--irm-green);
+}
+
+.btn-outline-irm:hover {
+  background-color: var(--irm-green);
+  color: #fff;
+}
+
+.text-irm {
+  color: var(--irm-green) !important;
+}
+
+.bg-irm-light {
+  background-color: var(--irm-green-light);
+}
+
+.hero {
+  background:
+    linear-gradient(rgba(40, 70, 38, 0.72), rgba(40, 70, 38, 0.72)),
+    url("../img/kraeutergarten.jpg") center / cover no-repeat;
+  color: #fff;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.card-product {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-img-top {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+}
+
+.card-product:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.12);
+}
+
+.badge-bio {
+  background-color: var(--irm-gold);
+  color: #fff;
+}
+
+.price {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--irm-green-dark);
+}
+
+section h2 {
+  border-bottom: 3px solid var(--irm-green);
+  display: inline-block;
+  padding-bottom: 0.25rem;
+}
+
+.footer-irm {
+  background-color: var(--irm-green-dark);
+  color: #e8f0e4;
+}
+
+.footer-irm a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.footer-irm a:hover {
+  color: var(--irm-gold);
+}
+
+.cart-count-badge {
+  position: relative;
+  top: -6px;
+}
+
+.notice-strip {
+  background-color: var(--irm-gold);
+  color: #2b2b2b;
+  font-size: 0.9rem;
+}

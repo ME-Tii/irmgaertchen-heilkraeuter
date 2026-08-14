@@ -1,0 +1,12 @@
+# Secrets & Daten
+server/.env
+server/shop.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Sonstiges
+.DS_Store
