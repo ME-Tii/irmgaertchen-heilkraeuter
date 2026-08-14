@@ -101,6 +101,7 @@
         <div id="contactSuccess" class="alert alert-success d-none mt-3">
           Vielen Dank! Ihre Nachricht wurde übermittelt. Wir melden uns bei Ihnen.
         </div>
+        <div id="contactError" class="alert alert-danger d-none mt-3" role="alert"></div>
       </div>
     </div>
   </main>
@@ -193,8 +194,32 @@
   <script>
     document.getElementById("contactForm").addEventListener("submit", function (e) {
       e.preventDefault();
-      this.classList.add("d-none");
-      document.getElementById("contactSuccess").classList.remove("d-none");
+      var btn = this.querySelector("button[type=submit]");
+      var errorBox = document.getElementById("contactError");
+      btn.disabled = true;
+      errorBox.classList.add("d-none");
+      fetch("api/contact", {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: document.getElementById("cname").value.trim(),
+          email: document.getElementById("cemail").value.trim(),
+          message: document.getElementById("cmessage").value.trim()
+        })
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        })
+        .then(function (result) {
+          if (!result.ok) throw new Error(result.data.error || "Das Senden ist fehlgeschlagen.");
+          this.classList.add("d-none");
+          document.getElementById("contactSuccess").classList.remove("d-none");
+        }.bind(this))
+        .catch(function (err) {
+          btn.disabled = false;
+          errorBox.textContent = err.message;
+          errorBox.classList.remove("d-none");
+        });
     });
   </script>
 </body>

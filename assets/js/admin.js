@@ -89,9 +89,12 @@ function switchTab(tab) {
   });
   const ordersPanel = document.getElementById("ordersPanel");
   const inventory = document.getElementById("inventory");
+  const messagesPanel = document.getElementById("messagesPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
+  if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
   if (tab === "inventory") renderInventory();
+  if (tab === "messages") renderMessages();
 }
 
 function renderAdmin() {
@@ -108,6 +111,7 @@ function renderAdmin() {
     switchTab("orders");
     loadDashboard();
     loadInventory();
+    loadMessages();
   } else {
     if (setupCard) setupCard.classList.add("d-none");
     if (loginCard) loginCard.classList.remove("d-none");
@@ -287,6 +291,71 @@ function refundOrder(orderNo, btn) {
     });
 }
 
+// ---------------------------------------------------------------- messages
+
+function loadMessages() {
+  return adminApi("api/admin/messages").then((data) => {
+    window.ADMIN_MESSAGES = data.messages || [];
+  });
+}
+
+function renderMessages() {
+  const body = document.getElementById("messagesBody");
+  if (!body) return;
+  const msgs = window.ADMIN_MESSAGES || [];
+  const unread = msgs.filter((m) => !m.read).length;
+  const badge = document.getElementById("msgCountBadge");
+  if (badge) {
+    badge.textContent = unread;
+    badge.classList.toggle("d-none", unread === 0);
+  }
+  const noMessages = document.getElementById("noMessages");
+  const tableWrap = document.getElementById("messagesTableWrap");
+  if (msgs.length === 0) {
+    if (noMessages) noMessages.classList.remove("d-none");
+    if (tableWrap) tableWrap.classList.add("d-none");
+    return;
+  }
+  if (noMessages) noMessages.classList.add("d-none");
+  if (tableWrap) tableWrap.classList.remove("d-none");
+
+  body.innerHTML = msgs
+    .map((m) => {
+      return (
+        "<tr class='" + (m.read ? "" : "fw-bold") + "'>" +
+        "<td>" + new Date(m.createdAt).toLocaleString("de-DE") + "</td>" +
+        "<td>" + esc(m.name) + "</td>" +
+        "<td><a href='mailto:" + esc(m.email) + "'>" + esc(m.email) + "</a></td>" +
+        "<td style='white-space:normal;max-width:420px;'>" + esc(m.message) + "</td>" +
+        '<td class="text-end text-nowrap">' +
+        '<button class="btn btn-sm btn-outline-secondary msg-read" data-id="' + m.id + '" title="Als gelesen markieren"' + (m.read ? " disabled" : "") + '><i class="bi bi-check2"></i></button> ' +
+        '<button class="btn btn-sm btn-outline-danger msg-delete" data-id="' + m.id + '" title="Löschen"><i class="bi bi-trash"></i></button>' +
+        "</td>" +
+        "</tr>"
+      );
+    })
+    .join("");
+
+  body.querySelectorAll(".msg-read").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      adminApi("api/admin/messages/" + btn.dataset.id + "/read", "POST")
+        .then(loadMessages)
+        .then(renderMessages)
+        .catch((err) => showMsg("messagesMsg", err.message, "danger"));
+    });
+  });
+  body.querySelectorAll(".msg-delete").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (confirm("Nachricht wirklich löschen?")) {
+        adminApi("api/admin/messages/" + btn.dataset.id, "DELETE")
+          .then(loadMessages)
+          .then(renderMessages)
+          .catch((err) => showMsg("messagesMsg", err.message, "danger"));
+      }
+    });
+  });
+}
+
 // ---------------------------------------------------------------- inventory
 
 function loadInventory() {
@@ -439,6 +508,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".admin-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+
+  const msgRefresh = document.getElementById("msgRefresh");
+  if (msgRefresh) {
+    msgRefresh.addEventListener("click", () => {
+      loadMessages()
+        .then(renderMessages)
+        .catch((err) => showMsg("messagesMsg", err.message, "danger"));
+    });
+  }
 
   const addProductForm = document.getElementById("addProductForm");
   if (addProductForm) {

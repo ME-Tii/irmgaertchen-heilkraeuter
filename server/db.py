@@ -86,6 +86,15 @@ SQLITE_SCHEMA = [
         stripe_payment_intent TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER REFERENCES users(id),
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        message TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -139,6 +148,15 @@ PG_SCHEMA = [
         refunded_at TEXT,
         stripe_refund_id TEXT,
         stripe_payment_intent TEXT,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
+    """CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        message TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
 ]
@@ -461,5 +479,38 @@ def update_order(order_no, fields):
 def delete_order(order_no):
     conn = get_conn()
     conn.execute(_sql("DELETE FROM orders WHERE order_no = %s"), (order_no,))
+    conn.commit()
+    conn.close()
+
+
+# ---- contact messages ----
+
+def create_contact_message(name, email, message, user_id=None):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO messages (user_id, name, email, message) VALUES (%s, %s, %s, %s)"),
+        (user_id, name, email, message),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_contact_messages():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM messages ORDER BY created_at DESC, id DESC").fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def mark_contact_message_read(message_id):
+    conn = get_conn()
+    conn.execute(_sql("UPDATE messages SET read = 1 WHERE id = %s"), (message_id,))
+    conn.commit()
+    conn.close()
+
+
+def delete_contact_message(message_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM messages WHERE id = %s"), (message_id,))
     conn.commit()
     conn.close()

@@ -189,6 +189,27 @@ def logout():
     return jsonify({"ok": True})
 
 
+def msg_to_dict(m):
+    d = dict(m)
+    d["read"] = bool(d.pop("read"))
+    d["createdAt"] = d.pop("created_at")
+    return d
+
+
+@app.post("/api/contact")
+def contact():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    message = (data.get("message") or "").strip()
+    if not name or not email or not message:
+        return err("Bitte Name, E-Mail und Nachricht angeben.", 400)
+    user = require_auth()
+    db.create_contact_message(name, email, message, user["id"] if user else None)
+    mailer.notify_admin_contact(name, email, message)
+    return jsonify({"ok": True})
+
+
 @app.get("/api/me")
 def me():
     user = require_auth()
@@ -577,6 +598,32 @@ def admin_delete_order(order_no):
     if order["status"] != "Zahlung ausstehend":
         db.restore_stock(json.loads(order.get("items_json") or "[]"))
     db.delete_order(order_no)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/admin/messages")
+def admin_messages():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify({"messages": [msg_to_dict(m) for m in db.list_contact_messages()]})
+
+
+@app.post("/api/admin/messages/<int:message_id>/read")
+def admin_message_read(message_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    db.mark_contact_message_read(message_id)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/messages/<int:message_id>")
+def admin_delete_message(message_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    db.delete_contact_message(message_id)
     return jsonify({"ok": True})
 
 

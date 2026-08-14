@@ -66,3 +66,17 @@ def notify_customer_status(user_email, order_no, status):
     subject = f"Bestellung {order_no}: {status}"
     text = f"Der Status Ihrer Bestellung {order_no} hat sich geändert: {status}"
     _send(subject, user_email, text)
+
+
+def notify_admin_contact(name, email, message):
+    if not ADMIN_EMAIL:
+        return
+    subject = f"Neue Kontaktanfrage von {name}"
+    text = (
+        f"Eine neue Nachricht über das Kontaktformular ist eingegangen.\n\n"
+        f"Name: {name}\n"
+        f"E-Mail: {email}\n\n"
+        f"Nachricht:\n{message}\n\n"
+        f"Im Admin-Panel unter „Nachrichten“ einsehbar."
+    )
+    _send(subject, ADMIN_EMAIL, text)
