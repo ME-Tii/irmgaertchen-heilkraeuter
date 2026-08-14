@@ -300,8 +300,8 @@ function loadMessages() {
 }
 
 function renderMessages() {
-  const body = document.getElementById("messagesBody");
-  if (!body) return;
+  const list = document.getElementById("messagesList");
+  if (!list) return;
   const msgs = window.ADMIN_MESSAGES || [];
   const unread = msgs.filter((m) => !m.read).length;
   const badge = document.getElementById("msgCountBadge");
@@ -310,33 +310,40 @@ function renderMessages() {
     badge.classList.toggle("d-none", unread === 0);
   }
   const noMessages = document.getElementById("noMessages");
-  const tableWrap = document.getElementById("messagesTableWrap");
+  const listWrap = document.getElementById("messagesListWrap");
   if (msgs.length === 0) {
     if (noMessages) noMessages.classList.remove("d-none");
-    if (tableWrap) tableWrap.classList.add("d-none");
+    if (listWrap) listWrap.classList.add("d-none");
+    list.innerHTML = "";
     return;
   }
   if (noMessages) noMessages.classList.add("d-none");
-  if (tableWrap) tableWrap.classList.remove("d-none");
+  if (listWrap) listWrap.classList.remove("d-none");
 
-  body.innerHTML = msgs
+  list.innerHTML = msgs
     .map((m) => {
       return (
-        "<tr class='" + (m.read ? "" : "fw-bold") + "'>" +
-        "<td>" + new Date(m.createdAt).toLocaleString("de-DE") + "</td>" +
-        "<td>" + esc(m.name) + "</td>" +
-        "<td><a href='mailto:" + esc(m.email) + "'>" + esc(m.email) + "</a></td>" +
-        "<td style='white-space:normal;max-width:420px;'>" + esc(m.message) + "</td>" +
-        '<td class="text-end text-nowrap">' +
-        '<button class="btn btn-sm btn-outline-secondary msg-read" data-id="' + m.id + '" title="Als gelesen markieren"' + (m.read ? " disabled" : "") + '><i class="bi bi-check2"></i></button> ' +
-        '<button class="btn btn-sm btn-outline-danger msg-delete" data-id="' + m.id + '" title="Löschen"><i class="bi bi-trash"></i></button>' +
-        "</td>" +
-        "</tr>"
+        '<div class="card message-card' + (m.read ? "" : " border-warning") + '">' +
+        '<div class="card-body">' +
+        '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">' +
+        '<div>' +
+        '<strong>' + (m.read ? "" : '<span class="badge text-bg-danger me-1">Neu</span>') + esc(m.name) + "</strong>" +
+        ' <a class="small text-muted" href="mailto:' + esc(m.email) + '">' + esc(m.email) + "</a>" +
+        "</div>" +
+        '<small class="text-muted">' + new Date(m.createdAt).toLocaleString("de-DE") + "</small>" +
+        "</div>" +
+        '<div class="p-3 message-box">' + esc(m.message) + "</div>" +
+        '<div class="d-flex gap-2 mt-2">' +
+        '<button class="btn btn-sm btn-outline-secondary msg-read" data-id="' + m.id + '"' + (m.read ? " disabled" : "") + '><i class="bi bi-check2"></i> Als gelesen</button> ' +
+        '<button class="btn btn-sm btn-outline-danger msg-delete" data-id="' + m.id + '"><i class="bi bi-trash"></i> Löschen</button>' +
+        "</div>" +
+        "</div>" +
+        "</div>"
       );
     })
     .join("");
 
-  body.querySelectorAll(".msg-read").forEach((btn) => {
+  list.querySelectorAll(".msg-read").forEach((btn) => {
     btn.addEventListener("click", () => {
       adminApi("api/admin/messages/" + btn.dataset.id + "/read", "POST")
         .then(loadMessages)
@@ -344,7 +351,7 @@ function renderMessages() {
         .catch((err) => showMsg("messagesMsg", err.message, "danger"));
     });
   });
-  body.querySelectorAll(".msg-delete").forEach((btn) => {
+  list.querySelectorAll(".msg-delete").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (confirm("Nachricht wirklich löschen?")) {
         adminApi("api/admin/messages/" + btn.dataset.id, "DELETE")
