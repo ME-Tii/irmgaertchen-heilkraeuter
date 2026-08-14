@@ -201,6 +201,13 @@ function renderCategories() {
     html += '<button type="button" class="btn btn-outline-irm" data-filter="' + esc(c) + '">' + esc(c) + "</button>";
   });
   wrap.innerHTML = html;
+  wrap.querySelectorAll("[data-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      wrap.querySelectorAll("[data-filter]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderShop(btn.dataset.filter);
+    });
+  });
 }
 
 function renderShop(category) {
@@ -888,16 +895,6 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => {
       logout();
       showToast("Sie wurden abgemeldet.");
-    });
-  });
-
-  document.querySelectorAll('[data-filter]').forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll('[data-filter]').forEach((b) => {
-        b.classList.remove("active");
-      });
-      btn.classList.add("active");
-      renderShop(btn.dataset.filter);
     });
   });
 });
