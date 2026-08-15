@@ -406,6 +406,7 @@ function renderInventory() {
         '<input type="file" accept="image/*" class="d-none img-file" data-id="' + esc(p.id) + '">' +
         '<button class="btn btn-sm btn-outline-secondary img-upload" data-id="' + esc(p.id) + '" title="Bild hochladen"><i class="bi bi-image"></i></button></td>' +
         '<td class="text-end text-nowrap">' +
+        '<button class="btn btn-sm btn-outline-irm product-details" data-id="' + esc(p.id) + '" title="Details bearbeiten (Name, Kategorie, Preis, Bestand, Beschreibung)"><i class="bi bi-pencil-square"></i> Details</button> ' +
         '<button class="btn btn-sm btn-irm stock-save" data-id="' + esc(p.id) + '"><i class="bi bi-check-lg"></i> Speichern</button> ' +
         '<button class="btn btn-sm btn-outline-secondary stock-unlimited" data-id="' + esc(p.id) + '" title="Als unbegrenzt markieren"><i class="bi bi-infinity"></i></button> ' +
         '<button class="btn btn-sm btn-outline-danger stock-delete" data-id="' + esc(p.id) + '" title="Artikel löschen"><i class="bi bi-trash"></i></button>' +
@@ -478,6 +479,19 @@ function renderInventory() {
       }
     });
   });
+  body.querySelectorAll(".product-details").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const product = (window.ADMIN_PRODUCTS || []).find((p) => p.id === btn.dataset.id);
+      if (!product) return;
+      document.getElementById("pdName").value = product.name || "";
+      document.getElementById("pdId").value = product.id || "";
+      document.getElementById("pdPrice").value = product.price != null ? product.price.toFixed(2) : "";
+      document.getElementById("pdStock").value = product.stock === null ? "" : product.stock;
+      document.getElementById("pdCategory").value = product.category || "";
+      document.getElementById("pdDesc").value = product.desc || "";
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("productDetailsModal")).show();
+    });
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -515,6 +529,35 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".admin-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+
+  const pdSave = document.getElementById("pdSave");
+  if (pdSave) {
+    pdSave.addEventListener("click", () => {
+      const id = document.getElementById("pdId").value;
+      const name = document.getElementById("pdName").value.trim();
+      if (!id || !name) {
+        showToast("Bitte einen Namen angeben.");
+        return;
+      }
+      const priceVal = document.getElementById("pdPrice").value;
+      const stockVal = document.getElementById("pdStock").value;
+      const payload = {
+        name,
+        category: document.getElementById("pdCategory").value.trim(),
+        desc: document.getElementById("pdDesc").value.trim(),
+      };
+      if (priceVal !== "") payload.price = Math.max(0, Number(priceVal) || 0);
+      payload.stock = stockVal === "" ? null : Math.max(0, Math.floor(Number(stockVal)) || 0);
+      adminApi("api/admin/products/" + encodeURIComponent(id), "PATCH", payload)
+        .then(() => {
+          showToast("Artikeldetails gespeichert.");
+          bootstrap.Modal.getOrCreateInstance(document.getElementById("productDetailsModal")).hide();
+          return loadInventory();
+        })
+        .then(renderInventory)
+        .catch((err) => showToast(err.message));
+    });
+  }
 
   const msgRefresh = document.getElementById("msgRefresh");
   if (msgRefresh) {
