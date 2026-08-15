@@ -1,6 +1,29 @@
 const CART_KEY = "irmgaertchen_cart";
 const TOKEN_KEY = "irm_api_token";
 const USER_KEY = "irm_api_user";
+const COOKIE_KEY = "irm_cookie_consent";
+
+function initCookieBanner() {
+  if (localStorage.getItem(COOKIE_KEY)) return;
+  const banner = document.createElement("div");
+  banner.className = "cookie-banner";
+  banner.innerHTML =
+    '<div class="cookie-banner-inner">' +
+    '<p class="cookie-banner-text mb-2">Diese Website verwendet ausschließlich technisch notwendige Cookies (z. B. für Warenkorb und Anmeldung) sowie Stripe zur Zahlungsabwicklung. Es werden keine Tracking-Cookies gesetzt. Weitere Informationen finden Sie in der <a href="datenschutz.html">Datenschutzerklärung</a>.</p>' +
+    '<div class="d-flex gap-2 flex-wrap">' +
+    '<button type="button" class="btn btn-irm btn-sm" data-cookie-accept>Alle akzeptieren</button>' +
+    '<button type="button" class="btn btn-outline-secondary btn-sm" data-cookie-necessary>Nur notwendige</button>' +
+    "</div></div>";
+  document.body.appendChild(banner);
+  banner.querySelector("[data-cookie-accept]").addEventListener("click", () => {
+    localStorage.setItem(COOKIE_KEY, "all");
+    banner.remove();
+  });
+  banner.querySelector("[data-cookie-necessary]").addEventListener("click", () => {
+    localStorage.setItem(COOKIE_KEY, "necessary");
+    banner.remove();
+  });
+}
 
 function esc(s) {
   return String(s)
@@ -724,6 +747,7 @@ function afterAuthSuccess(message) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initCookieBanner();
   updateCartCount();
   updateAuthUI();
   renderCart();
