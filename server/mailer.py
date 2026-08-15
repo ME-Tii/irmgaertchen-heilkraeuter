@@ -80,3 +80,20 @@ def notify_admin_contact(name, email, message):
         f"Im Admin-Panel unter „Nachrichten“ einsehbar."
     )
     _send(subject, ADMIN_EMAIL, text)
+
+
+def send_password_reset(user_email, name, reset_url):
+    if not user_email:
+        return
+    subject = "Passwort zurücksetzen – Irmgärtchen Heilkräuter"
+    text = (
+        f"Hallo {name},\n\n"
+        f"Sie haben angefragt, Ihr Passwort zurückzusetzen.\n"
+        f"Klicken Sie auf den folgenden Link, um ein neues Passwort zu wählen "
+        f"(gültig für 60 Minuten):\n\n"
+        f"{reset_url}\n\n"
+        f"Falls Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail einfach ignorieren.\n\n"
+        f"Mit freundlichen Grüßen\n"
+        f"Ihr Irmgärtchen-Team"
+    )
+    _send(subject, user_email, text)

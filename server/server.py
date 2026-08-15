@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import calendar
 import secrets
 import hmac
 import hashlib
@@ -238,6 +239,50 @@ def update_me():
         (data.get("email") or "").strip(),
         (data.get("phone") or "").strip(),
     )
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------- password reset
+
+RESET_TOKEN_TTL = 60 * 60
+
+
+@app.post("/api/forgot-password")
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    user = db.get_user_by_email(email) if email else None
+    if user:
+        token = secrets.token_urlsafe(32)
+        expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + RESET_TOKEN_TTL))
+        db.create_password_reset(user["id"], token, expires_at)
+        mailer.send_password_reset(
+            user["email"],
+            user.get("name") or user["username"],
+            f"{DOMAIN}/forgot-password.html?token={token}",
+        )
+    return jsonify({"ok": True})
+
+
+@app.post("/api/reset-password")
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    password = data.get("password") or ""
+    if len(password) < 6:
+        return err("Das Passwort muss mindestens 6 Zeichen haben.", 400)
+    rec = db.get_password_reset(token)
+    if not rec or rec["used"]:
+        return err("Der Link ist ungültig oder wurde bereits verwendet.", 400)
+    try:
+        expires = calendar.timegm(time.strptime(rec["expires_at"], "%Y-%m-%dT%H:%M:%SZ"))
+    except (TypeError, ValueError):
+        return err("Der Link ist abgelaufen.", 400)
+    if expires < time.time():
+        return err("Der Link ist abgelaufen.", 400)
+    db.set_user_password(rec["user_id"], generate_password_hash(password))
+    db.consume_password_reset(token)
+    db.delete_user_sessions(rec["user_id"])
     return jsonify({"ok": True})
 
 

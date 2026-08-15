@@ -855,6 +855,12 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .catch((err) => showAuthMessage(err.message, "danger"));
     });
+    if (!loginForm.querySelector("[data-forgot-link]")) {
+      const forgotWrap = document.createElement("div");
+      forgotWrap.className = "text-center mt-2";
+      forgotWrap.innerHTML = '<a href="forgot-password.html" class="small text-muted" data-forgot-link>Passwort vergessen?</a>';
+      loginForm.appendChild(forgotWrap);
+    }
   }
 
   const registerForm = document.getElementById("registerForm");

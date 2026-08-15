@@ -95,6 +95,14 @@ SQLITE_SCHEMA = [
         read INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS password_resets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        token TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -157,6 +165,14 @@ PG_SCHEMA = [
         email TEXT NOT NULL,
         message TEXT NOT NULL,
         read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
+    """CREATE TABLE IF NOT EXISTS password_resets (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
 ]
@@ -232,6 +248,13 @@ def get_user_by_username(username):
     return row_to_dict(row)
 
 
+def get_user_by_email(email):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM users WHERE email = %s"), (email,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
 def get_user_by_id(user_id):
     conn = get_conn()
     row = conn.execute(_sql("SELECT * FROM users WHERE id = %s"), (user_id,)).fetchone()
@@ -293,6 +316,46 @@ def create_session(token, user_id):
 def delete_session(token):
     conn = get_conn()
     conn.execute(_sql("DELETE FROM sessions WHERE token = %s"), (token,))
+    conn.commit()
+    conn.close()
+
+
+# ---- password reset ----
+
+def create_password_reset(user_id, token, expires_at):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO password_resets (user_id, token, expires_at) VALUES (%s, %s, %s)"),
+        (user_id, token, expires_at),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_password_reset(token):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM password_resets WHERE token = %s"), (token,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def consume_password_reset(token):
+    conn = get_conn()
+    conn.execute(_sql("UPDATE password_resets SET used = 1 WHERE token = %s"), (token,))
+    conn.commit()
+    conn.close()
+
+
+def set_user_password(user_id, password_hash):
+    conn = get_conn()
+    conn.execute(_sql("UPDATE users SET password_hash = %s WHERE id = %s"), (password_hash, user_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_user_sessions(user_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM sessions WHERE user_id = %s"), (user_id,))
     conn.commit()
     conn.close()
 
