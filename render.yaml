@@ -19,7 +19,7 @@ services:
           name: irmgaertchen-db
           property: connectionString
       - key: DOMAIN
-        value: https://irmgaertchen-shop.onrender.com
+        value: https://irmgaertchen.de
       - key: IRM_ADMIN_USERNAME
         value: admin
       - key: IRM_ADMIN_PASSWORD

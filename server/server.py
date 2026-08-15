@@ -881,7 +881,7 @@ def health():
         {
             "ok": True,
             "stripe_ready": bool(STRIPE_SECRET_KEY),
-            "db": os.environ.get("DATABASE_URL", "").strip() or db.DB_PATH,
+            "db": "postgres" if os.environ.get("DATABASE_URL", "").strip() else "sqlite",
         }
     )
 
