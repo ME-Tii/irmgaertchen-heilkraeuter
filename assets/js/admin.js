@@ -651,6 +651,43 @@ function renderStats() {
           .join("")
       : '<tr><td colspan="2" class="text-center text-muted py-4">Noch keine Besuche aufgezeichnet.</td></tr>';
   }
+  renderViewsChart();
+}
+
+function renderViewsChart() {
+  const canvas = document.getElementById("viewsChart");
+  const s = window.ADMIN_STATS;
+  if (!canvas || !s || typeof Chart === "undefined") return;
+  const labels = (s.daily || []).map((d) => {
+    const p = d.date.split("-");
+    return p[2] + "." + p[1] + ".";
+  });
+  const counts = (s.daily || []).map((d) => d.count);
+  if (window.__viewsChart) window.__viewsChart.destroy();
+  window.__viewsChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Besuche",
+          data: counts,
+          backgroundColor: "rgba(63, 107, 59, 0.75)",
+          borderColor: "rgba(63, 107, 59, 1)",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
 }
 
 function showToast(message) {

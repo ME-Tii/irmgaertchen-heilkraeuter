@@ -623,4 +623,23 @@ def get_view_stats():
         "today": today_count,
         "week": week_count,
         "top_pages": [{"path": r["path"], "count": r["c"]} for r in top_rows],
+        "daily": get_daily_views(14),
     }
+
+
+def get_daily_views(days=14):
+    conn = get_conn()
+    rows = conn.execute(
+        _sql(
+            "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS c FROM page_views "
+            "WHERE substr(created_at, 1, 10) >= %s GROUP BY day ORDER BY day"
+        ),
+        (time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1) * 86400)),),
+    ).fetchall()
+    conn.close()
+    by_day = {r["day"]: r["c"] for r in rows}
+    out = []
+    for i in range(days):
+        d = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1 - i) * 86400))
+        out.append({"date": d, "count": by_day.get(d, 0)})
+    return out
