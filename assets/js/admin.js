@@ -90,11 +90,14 @@ function switchTab(tab) {
   const ordersPanel = document.getElementById("ordersPanel");
   const inventory = document.getElementById("inventory");
   const messagesPanel = document.getElementById("messagesPanel");
+  const statsPanel = document.getElementById("statsPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
+  if (statsPanel) statsPanel.classList.toggle("d-none", tab !== "stats");
   if (tab === "inventory") renderInventory();
   if (tab === "messages") renderMessages();
+  if (tab === "stats") loadStats();
 }
 
 function renderAdmin() {
@@ -112,6 +115,7 @@ function renderAdmin() {
     loadDashboard();
     loadInventory();
     loadMessages();
+    loadStats();
   } else {
     if (setupCard) setupCard.classList.add("d-none");
     if (loginCard) loginCard.classList.remove("d-none");
@@ -568,6 +572,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const statsRefresh = document.getElementById("statsRefresh");
+  if (statsRefresh) {
+    statsRefresh.addEventListener("click", () => {
+      loadStats();
+    });
+  }
+
   const addProductForm = document.getElementById("addProductForm");
   if (addProductForm) {
     addProductForm.addEventListener("submit", (e) => {
@@ -604,6 +615,43 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// ---------------------------------------------------------------- stats
+
+function loadStats() {
+  return adminApi("api/admin/stats")
+    .then((data) => {
+      window.ADMIN_STATS = data;
+      renderStats();
+    })
+    .catch((err) => {
+      showMsg("statsMsg", err.message || "Statistiken konnten nicht geladen werden.", "danger");
+    });
+}
+
+function renderStats() {
+  const s = window.ADMIN_STATS;
+  const totalEl = document.getElementById("statViewsTotal");
+  const todayEl = document.getElementById("statViewsToday");
+  const weekEl = document.getElementById("statViewsWeek");
+  const body = document.getElementById("statsTopBody");
+  if (!s) return;
+  if (totalEl) totalEl.textContent = (s.total || 0).toLocaleString("de-DE");
+  if (todayEl) todayEl.textContent = (s.today || 0).toLocaleString("de-DE");
+  if (weekEl) weekEl.textContent = (s.week || 0).toLocaleString("de-DE");
+  if (body) {
+    const pages = s.top_pages || [];
+    body.innerHTML = pages.length
+      ? pages
+          .map(
+            (p) =>
+              '<tr><td><code>' + esc(p.path) + "</code></td><td class=\"text-end\">" +
+              (p.count || 0).toLocaleString("de-DE") + "</td></tr>"
+          )
+          .join("")
+      : '<tr><td colspan="2" class="text-center text-muted py-4">Noch keine Besuche aufgezeichnet.</td></tr>';
+  }
+}
 
 function showToast(message) {
   const container = document.getElementById("toastContainer");

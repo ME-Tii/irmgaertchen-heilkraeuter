@@ -103,6 +103,11 @@ SQLITE_SCHEMA = [
         used INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS page_views (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -173,6 +178,11 @@ PG_SCHEMA = [
         token TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         used INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
+    """CREATE TABLE IF NOT EXISTS page_views (
+        id SERIAL PRIMARY KEY,
+        path TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
 ]
@@ -577,3 +587,40 @@ def delete_contact_message(message_id):
     conn.execute(_sql("DELETE FROM messages WHERE id = %s"), (message_id,))
     conn.commit()
     conn.close()
+
+
+# ---- page views / traffic ----
+
+def record_view(path):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO page_views (path, created_at) VALUES (%s, %s)"),
+        (path, time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_view_stats():
+    conn = get_conn()
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    week_start = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 6 * 86400))
+    total = conn.execute("SELECT COUNT(*) AS c FROM page_views").fetchone()["c"]
+    today_count = conn.execute(
+        _sql("SELECT COUNT(*) AS c FROM page_views WHERE substr(created_at, 1, 10) = %s"),
+        (today,),
+    ).fetchone()["c"]
+    week_count = conn.execute(
+        _sql("SELECT COUNT(*) AS c FROM page_views WHERE created_at >= %s"),
+        (week_start,),
+    ).fetchone()["c"]
+    top_rows = conn.execute(
+        _sql("SELECT path, COUNT(*) AS c FROM page_views GROUP BY path ORDER BY c DESC LIMIT 10")
+    ).fetchall()
+    conn.close()
+    return {
+        "total": total,
+        "today": today_count,
+        "week": week_count,
+        "top_pages": [{"path": r["path"], "count": r["c"]} for r in top_rows],
+    }

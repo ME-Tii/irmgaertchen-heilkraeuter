@@ -98,6 +98,23 @@ def err(msg, code):
     return jsonify({"error": msg}), code
 
 
+@app.after_request
+def track_page_view(response):
+    path = request.path
+    if (
+        request.method == "GET"
+        and not path.startswith("/api/")
+        and not path.startswith("/assets/")
+        and path not in ("/admin.html", "/admin", "/robots.txt", "/sitemap.xml", "/favicon.ico")
+        and response.status_code < 400
+    ):
+        try:
+            db.record_view(path)
+        except Exception:
+            pass
+    return response
+
+
 def order_to_dict(order):
     d = dict(order)
     d["items"] = json.loads(order.get("items_json") or "[]")
@@ -874,6 +891,14 @@ def admin_delete_product(slug):
 
 
 # ---------------------------------------------------------------- misc
+
+@app.get("/api/admin/stats")
+def admin_stats():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify(db.get_view_stats())
+
 
 @app.get("/api/health")
 def health():
