@@ -5,9 +5,10 @@ import calendar
 import secrets
 import hmac
 import hashlib
+from xml.sax.saxutils import escape
 
 import stripe
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, render_template, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import db
@@ -39,10 +40,18 @@ ADMIN_PASSWORD = os.environ.get("IRM_ADMIN_PASSWORD", "")
 stripe.api_key = STRIPE_SECRET_KEY
 
 SHOP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(SHOP_DIR, "assets", "img")
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
-app = Flask(__name__, static_folder=SHOP_DIR, static_url_path="")
+SITE_URL = DOMAIN.rstrip("/")
+
+app = Flask(
+    __name__,
+    static_folder=SHOP_DIR,
+    static_url_path="",
+    template_folder=os.path.join(SERVER_DIR, "templates"),
+)
 
 db.init_db()
 
@@ -140,6 +149,103 @@ def add_cors_headers(response):
 @app.get("/")
 def index():
     return send_from_directory(SHOP_DIR, "index.html")
+
+
+# ---------------------------------------------------------------- SEO
+
+DEFAULT_PRODUCT_IMAGES = {
+    "salbei": "salbei.jpg",
+    "thymian": "thymian.jpg",
+    "rosmarin": "rosmarin.jpg",
+    "melisse": "melisse.jpg",
+    "kamille": "kamille.jpg",
+    "lavendel": "lavendel.jpg",
+    "minze": "minze.jpg",
+    "basilikum": "basilikum.jpg",
+    "salbeitee": "kraeutertee.jpg",
+    "kamillentee": "kamille.jpg",
+    "minztee": "minze.jpg",
+    "melissentee": "melisse.jpg",
+    "kraeuterbuendel": "kraeuterbuendel.jpg",
+    "ringelblume": "ringelblume.jpg",
+    "kapuzinerkresse": "kapuzinerkresse.jpg",
+}
+
+SITEMAP_PAGES = [
+    ("", "1.0", "daily"),
+    ("shop.html", "0.9", "daily"),
+    ("ueber-uns.html", "0.7", "monthly"),
+    ("kontakt.html", "0.6", "monthly"),
+    ("impressum.html", "0.2", "yearly"),
+    ("datenschutz.html", "0.2", "yearly"),
+    ("agb.html", "0.2", "yearly"),
+]
+
+
+def default_product_image(product):
+    if product.get("image"):
+        return product["image"]
+    return DEFAULT_PRODUCT_IMAGES.get(product["slug"], "kraeutergarten.jpg")
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "Disallow: /admin.html\n"
+        "Disallow: /cart.html\n"
+        "Disallow: /konto.html\n"
+        "Disallow: /bestellung-erfolgreich.html\n"
+        "Disallow: /forgot-password.html\n"
+        f"Sitemap: {SITE_URL}/sitemap.xml\n"
+    )
+    return Response(body, mimetype="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    entries = []
+    for path, priority, changefreq in SITEMAP_PAGES:
+        entries.append(
+            f"  <url>\n"
+            f"    <loc>{escape(SITE_URL + '/' + path)}</loc>\n"
+            f"    <changefreq>{changefreq}</changefreq>\n"
+            f"    <priority>{priority}</priority>\n"
+            f"  </url>"
+        )
+    for p in db.list_products():
+        loc = escape(f"{SITE_URL}/produkt/{p['slug']}")
+        entries.append(
+            f"  <url>\n"
+            f"    <loc>{loc}</loc>\n"
+            f"    <changefreq>weekly</changefreq>\n"
+            f"    <priority>0.7</priority>\n"
+            f"  </url>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(entries)
+        + "\n</urlset>\n"
+    )
+    return Response(xml, mimetype="application/xml")
+
+
+@app.get("/produkt/<slug>")
+def product_page(slug):
+    product = db.get_product(slug)
+    if not product or not product["visible"]:
+        return "Produkt nicht gefunden.", 404
+    image = default_product_image(product)
+    return render_template(
+        "product.html",
+        site_url=SITE_URL,
+        product=product,
+        image=image,
+        price="{:,.2f}".format(product["price_cents"] / 100).replace(",", "X").replace(".", ",").replace("X", "."),
+    )
 
 
 # ---------------------------------------------------------------- auth

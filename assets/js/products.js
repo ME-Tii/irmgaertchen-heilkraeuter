@@ -20,6 +20,15 @@ window.IRM_BASE_PRODUCTS = IRM_BASE_PRODUCTS;
 window.PRODUCTS = IRM_BASE_PRODUCTS.slice();
 
 function loadProducts() {
+  const embedded = document.getElementById("product-data");
+  if (embedded) {
+    try {
+      window.PRODUCTS = [JSON.parse(embedded.textContent)];
+      return Promise.resolve(window.PRODUCTS);
+    } catch (e) {
+      /* fall back to API */
+    }
+  }
   return fetch("api/products", { headers: { Accept: "application/json" } })
     .then((r) => {
       if (!r.ok) throw new Error("Produkte konnten nicht geladen werden.");

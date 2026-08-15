@@ -253,16 +253,17 @@ function renderShop(category) {
       return `
       <div class="col">
         <div class="card card-product h-100">
-          <img src="${imgFor(p.id, p)}" class="card-img-top" alt="${p.name}">
+          <a href="produkt/${p.id}"><img src="${imgFor(p.id, p)}" class="card-img-top" alt="${p.name}"></a>
           <span class="badge badge-bio position-absolute top-0 start-0 m-2">Naturland Bio</span>
           <div class="card-body d-flex flex-column">
-            <h5 class="card-title">${p.name}</h5>
+            <h5 class="card-title"><a href="produkt/${p.id}" class="text-decoration-none text-dark">${p.name}</a></h5>
             <p class="card-text text-muted small flex-grow-1">${p.desc}</p>
             ${stockBadge}
             <div class="d-flex justify-content-between align-items-center mt-2">
               <span class="price">${p.price.toFixed(2).replace(".", ",")} €</span>
               <button class="btn btn-irm btn-sm add-to-cart" data-id="${p.id}"${disabled}>In den Warenkorb</button>
             </div>
+            <a class="btn btn-outline-irm btn-sm w-100 mt-2" href="produkt/${p.id}">Details ansehen</a>
           </div>
         </div>
       </div>`;
@@ -754,6 +755,11 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSummary();
   handleCheckoutReturn();
   handleOrderSuccessPage();
+
+  const productAddBtn = document.getElementById("productAddToCart");
+  if (productAddBtn) {
+    productAddBtn.addEventListener("click", () => addToCart(productAddBtn.dataset.id));
+  }
 
   loadProducts().then(() => {
     renderCategories();
