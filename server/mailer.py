@@ -56,17 +56,46 @@ def notify_admin_order(order_no, total_euro, delivery_text, customer=None):
     _send(subject, ADMIN_EMAIL, "".join(lines))
 
 
-def notify_customer_order(user_email, order_no, total_euro):
+def _fmt_euro(value):
+    return f"{value:.2f}".replace(".", ",")
+
+
+def notify_customer_order(order, user_email=None):
+    user_email = user_email or (order.get("customerEmail") or "")
     if not user_email:
         return
+    order_no = order.get("order_no", "")
     subject = f"Ihre Bestellung {order_no} bei Irmgärtchen Heilkräuter"
-    text = (
-        f"Vielen Dank für Ihre Bestellung!\n\n"
-        f"Bestellnummer: {order_no}\n"
-        f"Betrag: {total_euro} EUR\n\n"
-        f"Sie können den Status jederzeit unter Mein Konto einsehen."
-    )
-    _send(subject, user_email, text)
+    lines = [
+        "Vielen Dank für Ihre Bestellung!\n\n",
+        f"Bestellnummer: {order_no}\n\n",
+        "Ihre Bestellung:\n",
+    ]
+    for it in order.get("items", []):
+        lines.append(
+            f"  {it.get('qty', 0)}x {it.get('name', '')} – "
+            f"{_fmt_euro(it.get('price', 0))} EUR "
+            f"(= {_fmt_euro(it.get('total', 0))} EUR)\n"
+        )
+    lines.append(f"\nZwischensumme: {_fmt_euro(order.get('subtotal', 0))} EUR\n")
+    if order.get("shipping"):
+        lines.append(f"Versand (Post): {_fmt_euro(order['shipping'])} EUR\n")
+    else:
+        lines.append("Versand: kostenlos\n")
+    lines.append(f"Gesamtbetrag: {_fmt_euro(order.get('total', 0))} EUR\n\n")
+
+    delivery = order.get("delivery") or {}
+    if delivery.get("method") == "delivery":
+        lines.append(
+            f"Lieferadresse:\n{delivery.get('street', '')}\n"
+            f"{delivery.get('zip', '')} {delivery.get('city', '')}\n\n"
+        )
+    else:
+        lines.append(
+            "Abholung: Wir rufen Sie an, sobald Ihre Bestellung zur Abholung bereit ist.\n\n"
+        )
+    lines.append('Sie können den Status jederzeit unter „Mein Konto" einsehen.')
+    _send(subject, user_email, "".join(lines))
 
 
 def notify_customer_status(user_email, order_no, status):

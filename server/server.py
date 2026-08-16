@@ -614,7 +614,7 @@ def stripe_webhook():
                 },
             )
             if user:
-                mailer.notify_customer_order(user["email"], order["order_no"], f"{order['total']:.2f} EUR")
+                mailer.notify_customer_order(order)
         return jsonify({"received": True})
 
     if etype == "charge.refunded":
