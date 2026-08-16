@@ -333,6 +333,15 @@ def get_user_by_email(email):
     return row_to_dict(row)
 
 
+def get_user_by_email_ci(email):
+    conn = get_conn()
+    row = conn.execute(
+        _sql("SELECT * FROM users WHERE LOWER(email) = LOWER(%s)"), (email,)
+    ).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
 def get_user_by_id(user_id):
     conn = get_conn()
     row = conn.execute(_sql("SELECT * FROM users WHERE id = %s"), (user_id,)).fetchone()

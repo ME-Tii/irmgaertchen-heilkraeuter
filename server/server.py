@@ -9,7 +9,10 @@ import hashlib
 import re
 import threading
 import zipfile
+from urllib.parse import quote, urlencode
 from xml.sax.saxutils import escape
+
+import requests
 
 
 def load_env():
@@ -27,7 +30,7 @@ def load_env():
 load_env()
 
 import stripe
-from flask import Flask, Response, jsonify, request, render_template, send_from_directory
+from flask import Flask, Response, jsonify, request, redirect, render_template, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import db
@@ -41,6 +44,8 @@ DOMAIN = os.environ.get("DOMAIN", "http://localhost:5000")
 PORT = int(os.environ.get("PORT", "5000"))
 ADMIN_USERNAME = os.environ.get("IRM_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("IRM_ADMIN_PASSWORD", "")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
 stripe.api_key = STRIPE_SECRET_KEY
 
@@ -50,6 +55,7 @@ IMG_DIR = os.path.join(SHOP_DIR, "assets", "img")
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 SITE_URL = DOMAIN.rstrip("/")
+GOOGLE_REDIRECT_URI = f"{SITE_URL}/api/auth/google/callback"
 
 app = Flask(
     __name__,
@@ -391,6 +397,109 @@ def product_page(slug):
 
 # ---------------------------------------------------------------- auth
 
+# ---------------------------------------------------------------- Google-Login
+
+def _google_oauth_url(state):
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "online",
+        "prompt": "select_account",
+        "state": state,
+    }
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+
+
+def _google_fetch_userinfo(code):
+    try:
+        tok = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        ).json()
+        access_token = tok.get("access_token")
+        if not access_token:
+            return None
+        info = requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": "Bearer " + access_token},
+            timeout=10,
+        ).json()
+        if not info.get("id") or not info.get("verified_email"):
+            return None
+        return info
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def _unique_google_username(email):
+    base = re.sub(r"[^a-z0-9._-]+", "", (email.split("@")[0] or "user").lower())[:30] or "user"
+    candidate, i = base, 1
+    while db.get_user_by_username(candidate):
+        i += 1
+        candidate = f"{base}{i}"
+    return candidate
+
+
+@app.get("/api/auth/google")
+def auth_google():
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return err("Google-Anmeldung ist nicht konfiguriert.", 500)
+    state = secrets.token_urlsafe(32)
+    resp = redirect(_google_oauth_url(state))
+    resp.set_cookie(
+        "google_oauth_state",
+        state,
+        max_age=600,
+        httponly=True,
+        samesite="Lax",
+        secure=request.is_secure,
+    )
+    return resp
+
+
+@app.get("/api/auth/google/callback")
+def auth_google_callback():
+    target = f"{SITE_URL}/konto.html"
+
+    def clear(resp):
+        resp.delete_cookie("google_oauth_state", path="/")
+        return resp
+
+    if request.args.get("error"):
+        return clear(redirect(f"{target}#google_error=access_denied"))
+    state = request.args.get("state", "")
+    if not state or not hmac.compare_digest(state, request.cookies.get("google_oauth_state", "")):
+        return clear(redirect(f"{target}#google_error=invalid_state"))
+    info = _google_fetch_userinfo(request.args.get("code", ""))
+    if not info:
+        return clear(redirect(f"{target}#google_error=oauth_failed"))
+    email = (info.get("email") or "").lower()
+    if not _is_valid_email(email):
+        return clear(redirect(f"{target}#google_error=no_email"))
+    user = db.get_user_by_email_ci(email)
+    if not user:
+        user_id = db.create_user(
+            _unique_google_username(email), email, generate_password_hash(secrets.token_urlsafe(32))
+        )
+        user = db.get_user_by_id(user_id)
+        name = _clean_text(info.get("name"), 100)
+        if name:
+            db.update_profile(user["id"], name, email, "")
+    token = secrets.token_hex(32)
+    db.create_session(token, user["id"])
+    fragment = f"google_token={token}&google_user={quote(user['username'])}"
+    return clear(redirect(f"{target}#{fragment}"))
+
+
 @app.post("/api/register")
 def register():
     if not _rate_limit("register", 5, 3600):
@@ -468,6 +577,11 @@ def contact():
     db.create_contact_message(name, email, message, user["id"] if user else None)
     mailer.notify_admin_contact(name, email, message)
     return jsonify({"ok": True})
+
+
+@app.get("/api/config")
+def api_config():
+    return jsonify({"googleLogin": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)})
 
 
 @app.get("/api/me")

@@ -181,17 +181,18 @@ function updateCartCount() {
   }
 }
 
-function showToast(message) {
+function showToast(message, type) {
   const container = document.getElementById("toastContainer");
   if (!container) return;
+  const isErr = type === "danger";
   const wrapper = document.createElement("div");
-  wrapper.className = "toast align-items-center text-bg-success border-0";
+  wrapper.className = "toast align-items-center border-0 text-bg-" + (isErr ? "danger" : "success");
   wrapper.setAttribute("role", "alert");
   wrapper.innerHTML =
     '<div class="d-flex"><div class="toast-body">' + message + '</div>' +
-    '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Schließen"></button></div>';
+    '<button type="button" class="btn-close me-2 m-auto' + (isErr ? "" : " btn-close-white") + '" data-bs-dismiss="toast" aria-label="Schließen"></button></div>';
   container.appendChild(wrapper);
-  const toast = new bootstrap.Toast(wrapper, { delay: 2500 });
+  const toast = new bootstrap.Toast(wrapper, { delay: isErr ? 4000 : 2500 });
   toast.show();
   wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
 }
@@ -429,6 +430,42 @@ function restoreSession() {
       localStorage.removeItem(USER_KEY);
       return null;
     });
+}
+
+function handleGoogleReturn() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = hash.get("google_token");
+  if (token) {
+    setSession({ token, username: hash.get("google_user") || "" });
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    updateAuthUI();
+    showToast("Anmeldung mit Google erfolgreich.");
+    document.querySelectorAll(".checkout-login-required").forEach((el) => {
+      el.classList.remove("d-none");
+    });
+    return;
+  }
+  const err = hash.get("google_error");
+  if (err) {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    showToast(
+      err === "access_denied"
+        ? "Die Google-Anmeldung wurde abgebrochen."
+        : "Die Anmeldung mit Google ist fehlgeschlagen.",
+      "danger"
+    );
+  }
+}
+
+function initGoogleLogin() {
+  const btn = document.getElementById("googleLoginBtn");
+  if (!btn) return;
+  fetch("/api/config")
+    .then((r) => r.json())
+    .then((cfg) => {
+      if (!cfg.googleLogin) btn.classList.add("d-none");
+    })
+    .catch(() => {});
 }
 
 function renderProfile() {
@@ -800,6 +837,8 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSummary();
   handleCheckoutReturn();
   handleOrderSuccessPage();
+  handleGoogleReturn();
+  initGoogleLogin();
 
   const productAddBtn = document.getElementById("productAddToCart");
   if (productAddBtn) {
