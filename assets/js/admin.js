@@ -259,7 +259,7 @@ function renderDashboard() {
   const orders = sortOrders(filterOrders(window.ADMIN_ORDERS || []));
   const body = document.getElementById("ordersBody");
   const noOrders = document.getElementById("noOrders");
-  const tableWrap = document.getElementById("ordersTableWrap");
+  const tableWrap = document.getElementById("ordersTableArea");
 
   document.getElementById("statTotal").textContent = orders.length;
   document.getElementById("statOpen").textContent = orders.filter((o) => o.status !== "Abgeschlossen").length;
