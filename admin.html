@@ -57,10 +57,10 @@
       </div>
 
       <ul class="nav nav-pills mb-4">
-        <li class="nav-item"><button class="nav-link active admin-tab" type="button" data-tab="orders"><i class="bi bi-receipt"></i> Bestellungen</button></li>
-        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="inventory"><i class="bi bi-box-seam"></i> Lager</button></li>
-        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="messages"><i class="bi bi-envelope"></i> Nachrichten <span class="badge text-bg-danger rounded-pill d-none" id="msgCountBadge">0</span></button></li>
-        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="stats"><i class="bi bi-graph-up"></i> Statistiken</button></li>
+        <li class="nav-item"><button class="nav-link active admin-tab" type="button" data-tab="orders" onclick="switchTab('orders')"><i class="bi bi-receipt"></i> Bestellungen</button></li>
+        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="inventory" onclick="switchTab('inventory')"><i class="bi bi-box-seam"></i> Lager</button></li>
+        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="messages" onclick="switchTab('messages')"><i class="bi bi-envelope"></i> Nachrichten <span class="badge text-bg-danger rounded-pill d-none" id="msgCountBadge">0</span></button></li>
+        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="stats" onclick="switchTab('stats')"><i class="bi bi-graph-up"></i> Statistiken</button></li>
       </ul>
 
       <div id="ordersPanel">

@@ -110,9 +110,14 @@ function switchTab(tab) {
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
   if (statsPanel) statsPanel.classList.toggle("d-none", tab !== "stats");
-  if (tab === "inventory") renderInventory();
-  if (tab === "messages") renderMessages();
-  if (tab === "stats") loadStats();
+  try {
+    if (tab === "inventory") renderInventory();
+    if (tab === "messages") renderMessages();
+    if (tab === "stats") loadStats();
+  } catch (e) {
+    console.error("Tab-Fehler:", e);
+    showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
+  }
 }
 
 function renderAdmin() {
@@ -533,13 +538,15 @@ function renderInventory() {
           ? '<span class="badge bg-warning text-dark">' + cur + "</span>"
           : '<span class="badge bg-success">' + cur + "</span>";
       const imgSrc = p.image ? "assets/img/" + p.image : "assets/img/kraeutergarten.jpg";
+      const safePrice = Number(p.price);
+      const priceVal = (isNaN(safePrice) ? 0 : safePrice).toFixed(2);
       return (
         "<tr>" +
         "<td>" + esc(p.name) + (p.custom ? ' <span class="badge bg-info text-dark">eigen</span>' : "") + "</td>" +
         "<td><small class=\"text-muted\">" + esc(p.category) + "</small></td>" +
         "<td>" + badge + "</td>" +
         '<td style="max-width:130px;"><input type="number" min="0" step="1" class="form-control form-control-sm stock-input" data-id="' + esc(p.id) + '" placeholder="Anzahl" value="' + (cur === null ? "" : cur) + '"></td>' +
-        '<td style="max-width:110px;"><input type="number" min="0" step="0.1" class="form-control form-control-sm price-input" data-id="' + esc(p.id) + '" value="' + p.price.toFixed(2) + '"></td>' +
+        '<td style="max-width:110px;"><input type="number" min="0" step="0.1" class="form-control form-control-sm price-input" data-id="' + esc(p.id) + '" value="' + priceVal + '"></td>' +
         '<td class="text-nowrap"><img src="' + imgSrc + '" alt="Bild" style="width:44px;height:44px;object-fit:cover;" class="rounded me-2">' +
         '<input type="file" accept="image/*" class="d-none img-file" data-id="' + esc(p.id) + '">' +
         '<button class="btn btn-sm btn-outline-secondary img-upload" data-id="' + esc(p.id) + '" title="Bild hochladen"><i class="bi bi-image"></i></button></td>' +
