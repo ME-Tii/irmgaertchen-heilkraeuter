@@ -24,17 +24,25 @@ def _send(subject, to, text):
     msg["To"] = to
     msg.set_content(text, subtype="plain", charset="utf-8")
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.starttls()
-            if SMTP_USER:
-                server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=30) as server:
+                if SMTP_USER:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                if SMTP_USER:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
         _log(to, subject, True, "")
         return True
     except Exception as e:
         # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
-        print(f"[mailer] Versand fehlgeschlagen: {e}")
-        _log(to, subject, False, str(e))
+        print(f"[mailer] Versand fehlgeschlagen ({SMTP_HOST}:{SMTP_PORT}): {e}")
+        _log(to, subject, False, f"({SMTP_HOST}:{SMTP_PORT}) {e}")
         return False
 
 
