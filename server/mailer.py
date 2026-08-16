@@ -14,6 +14,9 @@ def email_enabled():
     return bool(SMTP_HOST and SMTP_USER)
 
 
+FALLBACK_PORTS = [2525, 465]
+
+
 def _send(subject, to, text):
     if not email_enabled():
         _log(to, subject, False, "SMTP nicht konfiguriert")
@@ -23,27 +26,34 @@ def _send(subject, to, text):
     msg["From"] = SMTP_FROM
     msg["To"] = to
     msg.set_content(text, subtype="plain", charset="utf-8")
-    try:
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=30) as server:
-                if SMTP_USER:
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                if SMTP_USER:
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                server.send_message(msg)
-        _log(to, subject, True, "")
-        return True
-    except Exception as e:
-        # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
-        print(f"[mailer] Versand fehlgeschlagen ({SMTP_HOST}:{SMTP_PORT}): {e}")
-        _log(to, subject, False, f"({SMTP_HOST}:{SMTP_PORT}) {e}")
-        return False
+    candidates = [(SMTP_PORT, SMTP_PORT == 465)]
+    for port in FALLBACK_PORTS:
+        if port not in [c[0] for c in candidates]:
+            candidates.append((port, port == 465))
+    errors = []
+    for port, ssl in candidates:
+        try:
+            if ssl:
+                with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=20) as server:
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(SMTP_HOST, port, timeout=20) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            _log(to, subject, True, f"({SMTP_HOST}:{port})")
+            return True
+        except Exception as e:
+            # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
+            errors.append(f"({SMTP_HOST}:{port}) {e}")
+    print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
+    _log(to, subject, False, " | ".join(errors))
+    return False
 
 
 def _log(to, subject, ok, error):
