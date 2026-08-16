@@ -707,11 +707,17 @@ function renderStats() {
   const totalEl = document.getElementById("statViewsTotal");
   const todayEl = document.getElementById("statViewsToday");
   const weekEl = document.getElementById("statViewsWeek");
+  const visitorsTotalEl = document.getElementById("statVisitorsTotal");
+  const visitorsTodayEl = document.getElementById("statVisitorsToday");
+  const visitorsWeekEl = document.getElementById("statVisitorsWeek");
   const body = document.getElementById("statsTopBody");
   if (!s) return;
   if (totalEl) totalEl.textContent = (s.total || 0).toLocaleString("de-DE");
   if (todayEl) todayEl.textContent = (s.today || 0).toLocaleString("de-DE");
   if (weekEl) weekEl.textContent = (s.week || 0).toLocaleString("de-DE");
+  if (visitorsTotalEl) visitorsTotalEl.textContent = (s.unique_total || 0).toLocaleString("de-DE");
+  if (visitorsTodayEl) visitorsTodayEl.textContent = (s.unique_today || 0).toLocaleString("de-DE");
+  if (visitorsWeekEl) visitorsWeekEl.textContent = (s.unique_week || 0).toLocaleString("de-DE");
   if (body) {
     const pages = s.top_pages || [];
     body.innerHTML = pages.length

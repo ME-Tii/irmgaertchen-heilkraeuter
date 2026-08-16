@@ -111,6 +111,18 @@ SQLITE_SCHEMA = [
         path TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS visitors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        visitor_id TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
+    """CREATE TABLE IF NOT EXISTS visitor_days (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        visitor_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (visitor_id, day)
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -190,6 +202,18 @@ PG_SCHEMA = [
         id SERIAL PRIMARY KEY,
         path TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
+    """CREATE TABLE IF NOT EXISTS visitors (
+        id SERIAL PRIMARY KEY,
+        visitor_id TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
+    """CREATE TABLE IF NOT EXISTS visitor_days (
+        id SERIAL PRIMARY KEY,
+        visitor_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        UNIQUE (visitor_id, day)
     );""",
 ]
 
@@ -617,6 +641,34 @@ def record_view(path):
     conn.close()
 
 
+def _insert_ignore_sql(table, columns, conflict_col):
+    cols = ", ".join(columns)
+    ph = ", ".join(["%s"] * len(columns))
+    if USE_PG:
+        return _sql(f"INSERT INTO {table} ({cols}) VALUES ({ph}) ON CONFLICT ({conflict_col}) DO NOTHING")
+    return _sql(f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({ph})")
+
+
+def record_visitor(visitor_id, day):
+    if not visitor_id:
+        return
+    now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    conn = get_conn()
+    try:
+        conn.execute(_insert_ignore_sql("visitors", ["visitor_id", "created_at"], "visitor_id"), (visitor_id, now))
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(
+            _insert_ignore_sql("visitor_days", ["visitor_id", "day", "created_at"], "visitor_id, day"),
+            (visitor_id, day, now),
+        )
+    except Exception:
+        conn.rollback()
+    conn.commit()
+    conn.close()
+
+
 def get_view_stats():
     conn = get_conn()
     today = time.strftime("%Y-%m-%d", time.gmtime())
@@ -633,11 +685,21 @@ def get_view_stats():
     top_rows = conn.execute(
         _sql("SELECT path, COUNT(*) AS c FROM page_views GROUP BY path ORDER BY c DESC LIMIT 10")
     ).fetchall()
+    unique_total = conn.execute("SELECT COUNT(*) AS c FROM visitors").fetchone()["c"]
+    unique_today = conn.execute(
+        _sql("SELECT COUNT(*) AS c FROM visitor_days WHERE day = %s"), (today,)
+    ).fetchone()["c"]
+    unique_week = conn.execute(
+        _sql("SELECT COUNT(*) AS c FROM visitor_days WHERE day >= %s"), (week_start,)
+    ).fetchone()["c"]
     conn.close()
     return {
         "total": total,
         "today": today_count,
         "week": week_count,
+        "unique_total": unique_total,
+        "unique_today": unique_today,
+        "unique_week": unique_week,
         "top_pages": [{"path": r["path"], "count": r["c"]} for r in top_rows],
         "daily": get_daily_views(14),
     }

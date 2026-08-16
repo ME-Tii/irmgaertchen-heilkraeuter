@@ -111,6 +111,20 @@ def track_page_view(response):
     ):
         try:
             db.record_view(path)
+            visitor_id = request.cookies.get("irm_visitor", "")
+            if not visitor_id:
+                visitor_id = secrets.token_urlsafe(16)
+                response.set_cookie(
+                    "irm_visitor",
+                    visitor_id,
+                    max_age=63072000,
+                    path="/",
+                    httponly=True,
+                    samesite="Lax",
+                    secure=request.is_secure,
+                )
+            day = time.strftime("%Y-%m-%d", time.gmtime())
+            db.record_visitor(visitor_id, day)
         except Exception:
             pass
     return response
