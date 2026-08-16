@@ -16,7 +16,7 @@ def email_enabled():
 
 def _send(subject, to, text):
     if not email_enabled():
-        return
+        return False
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
@@ -28,23 +28,32 @@ def _send(subject, to, text):
             if SMTP_USER:
                 server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
+        return True
     except Exception as e:
         # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
         print(f"[mailer] Versand fehlgeschlagen: {e}")
+        return False
 
 
-def notify_admin_order(order_no, total_euro, delivery_text):
+def notify_admin_order(order_no, total_euro, delivery_text, customer=None):
     if not ADMIN_EMAIL:
         return
+    customer = customer or {}
     subject = f"Neue Bestellung {order_no}"
-    text = (
-        f"Es ist eine neue Bestellung eingegangen.\n\n"
-        f"Bestellnummer: {order_no}\n"
-        f"Betrag: {total_euro} EUR\n"
-        f"Lieferung: {delivery_text}\n\n"
-        f"Bitte im Admin-Panel bearbeiten."
-    )
-    _send(subject, ADMIN_EMAIL, text)
+    lines = [
+        f"Es ist eine neue Bestellung eingegangen.\n\n",
+        f"Bestellnummer: {order_no}\n",
+        f"Betrag: {total_euro} EUR\n",
+        f"Lieferung: {delivery_text}\n",
+    ]
+    if customer.get("name"):
+        lines.append(f"Kunde: {customer['name']}\n")
+    if customer.get("phone"):
+        lines.append(f"Telefon: {customer['phone']}\n")
+    if customer.get("email"):
+        lines.append(f"E-Mail: {customer['email']}\n")
+    lines.append("\nBitte im Admin-Panel bearbeiten.")
+    _send(subject, ADMIN_EMAIL, "".join(lines))
 
 
 def notify_customer_order(user_email, order_no, total_euro):
@@ -97,3 +106,18 @@ def send_password_reset(user_email, name, reset_url):
         f"Ihr Irmgärtchen-Team"
     )
     _send(subject, user_email, text)
+
+
+def send_test_mail():
+    """Sendet eine Test-E-Mail an ADMIN_EMAIL; liefert (ok, message)."""
+    if not email_enabled():
+        return False, "SMTP ist nicht konfiguriert."
+    if not ADMIN_EMAIL:
+        return False, "Keine Admin-E-Mail (ADMIN_EMAIL) gesetzt."
+    ok = _send(
+        "Testmail Irmgärtchen-Shop",
+        ADMIN_EMAIL,
+        "Wenn Sie diese E-Mail lesen, funktioniert der E-Mail-Versand des Shops.\n\n"
+        "Viele Grüße,\nIhr Irmgärtchen-Shop",
+    )
+    return (True, "Testmail an " + ADMIN_EMAIL + " gesendet.") if ok else (False, "Versand fehlgeschlagen.")

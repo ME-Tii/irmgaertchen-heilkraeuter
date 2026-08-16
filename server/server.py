@@ -7,14 +7,6 @@ import hmac
 import hashlib
 from xml.sax.saxutils import escape
 
-import stripe
-from flask import Flask, Response, jsonify, request, render_template, send_from_directory
-from werkzeug.security import generate_password_hash, check_password_hash
-
-import db
-from products import shipping_fee_cents
-import mailer
-
 
 def load_env():
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -29,6 +21,15 @@ def load_env():
 
 
 load_env()
+
+import stripe
+from flask import Flask, Response, jsonify, request, render_template, send_from_directory
+from werkzeug.security import generate_password_hash, check_password_hash
+
+import db
+from products import shipping_fee_cents
+import mailer
+
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
@@ -137,6 +138,9 @@ def order_to_dict(order):
     d.pop("delivery_city", None)
     d["customerConfirmed"] = bool(d.pop("customer_confirmed"))
     d["customerConfirmedAt"] = d.pop("customer_confirmed_at")
+    d["customerName"] = d.pop("customer_name", "") or ""
+    d["customerEmail"] = d.pop("customer_email", "") or ""
+    d["customerPhone"] = d.pop("customer_phone", "") or ""
     d["returnRequested"] = bool(d.pop("return_requested"))
     d["returnReason"] = d.pop("return_reason")
     d["returnProcessed"] = bool(d.pop("return_processed"))
@@ -449,6 +453,9 @@ def create_checkout_session():
 
     delivery = bool(data.get("delivery"))
     addr = data.get("shipping_address") or {}
+    phone = (data.get("phone") or "").strip() or (user.get("phone") or "").strip()
+    customer_name = (data.get("name") or "").strip() or (user.get("name") or "").strip()
+    customer_email = (user.get("email") or "").strip()
 
     line_items = []
     resolved = []
@@ -510,6 +517,9 @@ def create_checkout_session():
         "delivery_street": addr.get("street", "") if delivery else "",
         "delivery_zip": addr.get("zip", "") if delivery else "",
         "delivery_city": addr.get("city", "") if delivery else "",
+        "customer_name": customer_name,
+        "customer_email": customer_email,
+        "customer_phone": phone,
         "status": "Zahlung ausstehend",
     }
     db.create_order(order)
@@ -583,6 +593,11 @@ def stripe_webhook():
                 order["order_no"],
                 f"{order['total']:.2f}".replace(".", ","),
                 "Versand an " + order["delivery"]["street"] if order["delivery"]["method"] == "delivery" else "Abholung",
+                {
+                    "name": order.get("customerName") or (user["name"] if user else ""),
+                    "email": order.get("customerEmail") or (user["email"] if user else ""),
+                    "phone": order.get("customerPhone") or (user["phone"] if user else ""),
+                },
             )
             if user:
                 mailer.notify_customer_order(user["email"], order["order_no"], f"{order['total']:.2f} EUR")
@@ -898,6 +913,31 @@ def admin_stats():
     if bad:
         return bad
     return jsonify(db.get_view_stats())
+
+
+@app.get("/api/admin/mail-status")
+def admin_mail_status():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify(
+        {
+            "smtp_configured": mailer.email_enabled(),
+            "admin_email_set": bool(mailer.ADMIN_EMAIL),
+            "from": mailer.SMTP_FROM,
+        }
+    )
+
+
+@app.post("/api/admin/mail-test")
+def admin_mail_test():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    ok, message = mailer.send_test_mail()
+    if not ok:
+        return err(message, 500)
+    return jsonify({"ok": True, "message": message})
 
 
 @app.get("/api/health")

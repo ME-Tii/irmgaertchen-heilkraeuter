@@ -458,6 +458,8 @@ function startStripeCheckout() {
     cart: getCart().map((i) => ({ id: i.id, qty: i.qty })),
     delivery: delivery.method === "delivery",
     shipping_address: { street: delivery.street, zip: delivery.zip, city: delivery.city },
+    phone: val("phone"),
+    name: (window.CURRENT_PROFILE || {}).name || "",
   };
   const snapshot = {
     user: user,

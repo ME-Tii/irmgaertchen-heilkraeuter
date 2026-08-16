@@ -74,6 +74,9 @@ SQLITE_SCHEMA = [
         delivery_street TEXT NOT NULL DEFAULT '',
         delivery_zip TEXT NOT NULL DEFAULT '',
         delivery_city TEXT NOT NULL DEFAULT '',
+        customer_name TEXT NOT NULL DEFAULT '',
+        customer_email TEXT NOT NULL DEFAULT '',
+        customer_phone TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'Eingegangen',
         customer_confirmed INTEGER NOT NULL DEFAULT 0,
         customer_confirmed_at TEXT,
@@ -151,6 +154,9 @@ PG_SCHEMA = [
         delivery_street TEXT NOT NULL DEFAULT '',
         delivery_zip TEXT NOT NULL DEFAULT '',
         delivery_city TEXT NOT NULL DEFAULT '',
+        customer_name TEXT NOT NULL DEFAULT '',
+        customer_email TEXT NOT NULL DEFAULT '',
+        customer_phone TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'Eingegangen',
         customer_confirmed INTEGER NOT NULL DEFAULT 0,
         customer_confirmed_at TEXT,
@@ -221,6 +227,12 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    for col in ("customer_name", "customer_email", "customer_phone"):
+        try:
+            conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
     try:
         conn.execute(_sql("ALTER TABLE products ADD COLUMN image TEXT NOT NULL DEFAULT ''"))
         conn.commit()
@@ -467,9 +479,10 @@ def create_order(order):
     cur = conn.execute(
         _sql("INSERT INTO orders (order_no, user_id, stripe_session_id, items_json, subtotal_cents, "
              "shipping_cents, total_cents, delivery_method, delivery_street, delivery_zip, delivery_city, "
-             "status, customer_confirmed, customer_confirmed_at, return_requested, return_reason, "
-             "return_processed, refunded, refunded_at, stripe_refund_id, stripe_payment_intent, created_at) "
-             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") + _ret_id(),
+             "customer_name, customer_email, customer_phone, status, customer_confirmed, customer_confirmed_at, "
+             "return_requested, return_reason, return_processed, refunded, refunded_at, stripe_refund_id, "
+             "stripe_payment_intent, created_at) "
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") + _ret_id(),
         (
             order["order_no"],
             order.get("user_id"),
@@ -482,6 +495,9 @@ def create_order(order):
             order.get("delivery_street", ""),
             order.get("delivery_zip", ""),
             order.get("delivery_city", ""),
+            order.get("customer_name", ""),
+            order.get("customer_email", ""),
+            order.get("customer_phone", ""),
             order.get("status", "Eingegangen"),
             int(order.get("customer_confirmed", False)),
             order.get("customer_confirmed_at"),

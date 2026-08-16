@@ -116,6 +116,7 @@ function renderAdmin() {
     loadInventory();
     loadMessages();
     loadStats();
+    loadMailStatus();
   } else {
     if (setupCard) setupCard.classList.add("d-none");
     if (loginCard) loginCard.classList.remove("d-none");
@@ -135,6 +136,45 @@ function loadDashboard() {
     .catch((err) => {
       showMsg("ordersMsg", err.message || "Bestellungen konnten nicht geladen werden.", "danger");
     });
+}
+
+function waPhone(phone) {
+  let d = String(phone || "").replace(/[^\d+]/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("0")) d = "49" + d.slice(1);
+  return d.replace(/^\+/, "");
+}
+
+function contactCell(o) {
+  const name = o.customerName || o.user || "";
+  const email = o.customerEmail || "";
+  const phone = o.customerPhone || "";
+  const lines = [];
+  if (name) lines.push(esc(name));
+  if (phone) lines.push(esc(phone));
+  if (email) lines.push('<span class="text-muted">' + esc(email) + "</span>");
+  const btns = [];
+  if (phone) {
+    const wa = waPhone(phone);
+    btns.push(
+      '<a class="btn btn-sm btn-success" style="line-height:1;" href="https://wa.me/' + wa +
+        '" target="_blank" rel="noopener" title="WhatsApp: ' + esc(phone) + '"><i class="bi bi-whatsapp"></i></a>'
+    );
+    btns.push(
+      '<a class="btn btn-sm btn-outline-irm" style="line-height:1;" href="tel:' +
+        esc(String(phone).replace(/\s+/g, "")) + '" title="Anrufen: ' + esc(phone) + '"><i class="bi bi-telephone"></i></a>'
+    );
+  }
+  if (email) {
+    btns.push(
+      '<a class="btn btn-sm btn-outline-secondary" style="line-height:1;" href="mailto:' + esc(email) +
+        '" title="E-Mail: ' + esc(email) + '"><i class="bi bi-envelope"></i></a>'
+    );
+  }
+  return (
+    lines.join("<br>") +
+    (btns.length ? '<div class="d-flex gap-1 mt-1 flex-wrap">' + btns.join("") + "</div>" : "")
+  );
 }
 
 function renderDashboard() {
@@ -202,7 +242,7 @@ function renderDashboard() {
         '<tr>' +
         "<td><strong>" + esc(o.order_no) + "</strong></td>" +
         "<td>" + new Date(o.created_at).toLocaleString("de-DE") + "</td>" +
-        "<td>" + esc(o.user || "") + "</td>" +
+        "<td>" + contactCell(o) + "</td>" +
         "<td>" + items + "</td>" +
         "<td>" + fmtMoney(o.total) + "</td>" +
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
@@ -579,6 +619,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const mailTestBtn = document.getElementById("mailTestBtn");
+  if (mailTestBtn) {
+    mailTestBtn.addEventListener("click", sendTestMail);
+  }
+
   const addProductForm = document.getElementById("addProductForm");
   if (addProductForm) {
     addProductForm.addEventListener("submit", (e) => {
@@ -615,6 +660,34 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// ---------------------------------------------------------------- mail
+
+function loadMailStatus() {
+  return adminApi("api/admin/mail-status")
+    .then((s) => {
+      const wrap = document.getElementById("mailStatusWrap");
+      if (!wrap) return;
+      if (s.smtp_configured && s.admin_email_set) {
+        wrap.classList.add("d-none");
+        return;
+      }
+      const text = document.getElementById("mailStatusText");
+      if (text) {
+        text.textContent = s.smtp_configured
+          ? "Keine Admin-E-Mail (ADMIN_EMAIL) gesetzt."
+          : "SMTP ist nicht konfiguriert – Bestell- und Statusmails an Kunden werden nicht versendet.";
+      }
+      wrap.classList.remove("d-none");
+    })
+    .catch(() => {});
+}
+
+function sendTestMail() {
+  adminApi("api/admin/mail-test", "POST")
+    .then((d) => showToast(d.message || "Testmail gesendet."))
+    .catch((err) => showToast(err.message));
+}
 
 // ---------------------------------------------------------------- stats
 
