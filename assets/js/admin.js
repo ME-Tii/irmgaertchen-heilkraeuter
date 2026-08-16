@@ -1,4 +1,15 @@
 const ADMIN_TOKEN_KEY = "irm_admin_token";
+const STATUSES = ["Eingegangen", "In Bearbeitung", "Bereit zur Abholung", "Versandt", "Abgeschlossen"];
+const STATUSES_SHIPPING = ["Eingegangen", "In Bearbeitung", "Versandt", "Abgeschlossen"];
+const STATUS_CLASS = {
+  "Zahlung ausstehend": "bg-secondary",
+  "Eingegangen": "bg-secondary",
+  "In Bearbeitung": "bg-primary",
+  "Bereit zur Abholung": "bg-warning text-dark",
+  "Versandt": "bg-info",
+  "Abgeschlossen": "bg-success",
+};
+
 function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;")
