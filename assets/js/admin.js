@@ -623,6 +623,11 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", sendTestMail);
   });
 
+  const smtpCheckBtn = document.getElementById("smtpCheckBtn");
+  if (smtpCheckBtn) {
+    smtpCheckBtn.addEventListener("click", runSmtpCheck);
+  }
+
   const addProductForm = document.getElementById("addProductForm");
   if (addProductForm) {
     addProductForm.addEventListener("submit", (e) => {
@@ -692,6 +697,39 @@ function sendTestMail() {
   adminApi("api/admin/mail-test", "POST")
     .then((d) => showToast(d.message || "Testmail gesendet."))
     .catch((err) => showToast(err.message));
+}
+
+function runSmtpCheck() {
+  const modalEl = document.getElementById("smtpCheckModal");
+  if (!modalEl) return;
+  const loading = document.getElementById("smtpCheckLoading");
+  const result = document.getElementById("smtpCheckResult");
+  loading.classList.remove("d-none");
+  result.classList.add("d-none");
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  adminApi("api/admin/smtp-check", "POST")
+    .then((d) => {
+      const lines = [
+        "Host: " + d.host,
+        "Port: " + d.port,
+        "",
+        "DNS-Auflösung:",
+        "  " + ((d.addrs || ["?"]).join("\n  ") || "–"),
+        "",
+        "TCP-Verbindung: " + d.connect,
+        "",
+        "Testmail senden: " + (d.send ? (d.send.ok ? "OK – " + d.send.message : "FEHLER – " + d.send.message) : "–"),
+      ];
+      result.textContent = lines.join("\n");
+    })
+    .catch((err) => {
+      result.textContent = "Diagnose fehlgeschlagen: " + (err.message || err);
+    })
+    .finally(() => {
+      loading.classList.add("d-none");
+      result.classList.remove("d-none");
+    });
 }
 
 // ---------------------------------------------------------------- stats

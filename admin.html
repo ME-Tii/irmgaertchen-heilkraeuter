@@ -50,6 +50,7 @@
         <h1 class="h3 mb-0"><i class="bi bi-clipboard-check"></i> Verwaltung</h1>
         <div class="d-flex gap-2 flex-wrap">
           <button class="btn btn-outline-irm mail-test-btn" type="button"><i class="bi bi-envelope-check"></i> Testmail senden</button>
+          <button class="btn btn-outline-secondary" type="button" id="smtpCheckBtn"><i class="bi bi-pin-angle"></i> SMTP-Diagnose</button>
           <button class="btn btn-outline-irm" type="button" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Aktualisieren</button>
         </div>
       </div>
@@ -303,6 +304,27 @@
   </footer>
 
   <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+  <div class="modal fade" id="smtpCheckModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pin-angle"></i> SMTP-Diagnose</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+        </div>
+        <div class="modal-body">
+          <div id="smtpCheckLoading" class="text-center py-4">
+            <div class="spinner-border text-irm" role="status"></div>
+            <div class="mt-2 text-muted">Verbindung wird getestet…</div>
+          </div>
+          <pre id="smtpCheckResult" class="bg-light border rounded p-3 small mb-0 d-none" style="white-space:pre-wrap;word-break:break-word;"></pre>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-irm" data-bs-dismiss="modal">Schließen</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="modal fade" id="productDetailsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
