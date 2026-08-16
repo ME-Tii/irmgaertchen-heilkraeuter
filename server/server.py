@@ -961,44 +961,6 @@ def admin_mail_status():
     )
 
 
-@app.post("/api/admin/mail-test")
-def admin_mail_test():
-    bad = _admin_ok(require_admin())
-    if bad:
-        return bad
-    ok, message = mailer.send_test_mail()
-    if not ok:
-        return err(message, 500)
-    return jsonify({"ok": True, "message": message})
-
-
-@app.post("/api/admin/smtp-check")
-def admin_smtp_check():
-    bad = _admin_ok(require_admin())
-    if bad:
-        return bad
-    import socket
-
-    result = {"host": mailer.SMTP_HOST, "port": mailer.SMTP_PORT}
-    try:
-        addrs = socket.getaddrinfo(mailer.SMTP_HOST, mailer.SMTP_PORT, proto=socket.IPPROTO_TCP)
-        result["addrs"] = sorted({f"{a[4][0]} (IPv{a[0].name[-1]})" for a in addrs})
-    except Exception as e:
-        result["addrs"] = [f"DNS-Fehler: {e}"]
-    try:
-        s = socket.create_connection((mailer.SMTP_HOST, mailer.SMTP_PORT), timeout=15)
-        s.close()
-        result["connect"] = "ok"
-    except Exception as e:
-        result["connect"] = f"Fehler: {e}"
-    if result.get("connect") == "ok" and mailer.email_enabled():
-        ok, message = mailer.send_test_mail()
-        result["send"] = {"ok": ok, "message": message}
-    else:
-        result["send"] = {"ok": False, "message": "Verbindung fehlgeschlagen – Senden übersprungen."}
-    return jsonify(result)
-
-
 @app.get("/api/health")
 def health():
     return jsonify(

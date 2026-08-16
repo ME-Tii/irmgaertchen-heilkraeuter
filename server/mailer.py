@@ -165,18 +165,3 @@ def send_password_reset(user_email, name, reset_url):
         f"Ihr Irmgärtchen-Team"
     )
     _send(subject, user_email, text)
-
-
-def send_test_mail():
-    """Sendet eine Test-E-Mail an ADMIN_EMAIL; liefert (ok, message)."""
-    if not email_enabled():
-        return False, "SMTP ist nicht konfiguriert."
-    if not ADMIN_EMAIL:
-        return False, "Keine Admin-E-Mail (ADMIN_EMAIL) gesetzt."
-    ok = _send(
-        "Testmail Irmgärtchen-Shop",
-        ADMIN_EMAIL,
-        "Wenn Sie diese E-Mail lesen, funktioniert der E-Mail-Versand des Shops.\n\n"
-        "Viele Grüße,\nIhr Irmgärtchen-Shop",
-    )
-    return (True, "Testmail an " + ADMIN_EMAIL + " gesendet.") if ok else (False, "Versand fehlgeschlagen.")
