@@ -660,15 +660,6 @@ def log_email_attempt(recipient, subject, ok, error=""):
         pass
 
 
-def get_mail_log(limit=20):
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT recipient, subject, ok, error, created_at FROM mail_log ORDER BY id DESC LIMIT " + str(int(limit))
-    ).fetchall()
-    conn.close()
-    return all_rows(rows)
-
-
 # ---- page views / traffic ----
 
 def record_view(path):

@@ -116,7 +116,6 @@ function renderAdmin() {
     loadInventory();
     loadMessages();
     loadStats();
-    loadMailStatus();
   } else {
     if (setupCard) setupCard.classList.add("d-none");
     if (loginCard) loginCard.classList.remove("d-none");
@@ -655,34 +654,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
-
-// ---------------------------------------------------------------- mail
-
-function loadMailStatus() {
-  return adminApi("api/admin/mail-status")
-    .then((s) => {
-      const wrap = document.getElementById("mailStatusWrap");
-      if (!wrap) return;
-      const text = document.getElementById("mailStatusText");
-      const failed = (s.last_attempts || []).filter((a) => !a.ok);
-      if (s.smtp_configured && s.admin_email_set && failed.length === 0) {
-        wrap.classList.add("d-none");
-        return;
-      }
-      if (text) {
-        if (!s.smtp_configured) {
-          text.textContent = "SMTP ist nicht konfiguriert (Host " + (s.host || "?") + ") – Bestell- und Statusmails werden nicht versendet.";
-        } else if (!s.admin_email_set) {
-          text.textContent = "Keine Admin-E-Mail (ADMIN_EMAIL) gesetzt.";
-        } else {
-          const last = failed[0];
-          text.textContent = "Letzter Mailversand fehlgeschlagen (" + (last.recipient || "?") + "): " + (last.error || "unbekannter Fehler");
-        }
-      }
-      wrap.classList.remove("d-none");
-    })
-    .catch(() => {});
-}
 
 // ---------------------------------------------------------------- stats
 

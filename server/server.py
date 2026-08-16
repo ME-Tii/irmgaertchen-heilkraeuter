@@ -943,24 +943,6 @@ def admin_stats():
     return jsonify(db.get_view_stats())
 
 
-@app.get("/api/admin/mail-status")
-def admin_mail_status():
-    bad = _admin_ok(require_admin())
-    if bad:
-        return bad
-    return jsonify(
-        {
-            "smtp_configured": mailer.email_enabled(),
-            "admin_email_set": bool(mailer.ADMIN_EMAIL),
-            "from": mailer.SMTP_FROM,
-            "host": mailer.SMTP_HOST,
-            "port": mailer.SMTP_PORT,
-            "webhook_secret_set": bool(STRIPE_WEBHOOK_SECRET),
-            "last_attempts": db.get_mail_log(10),
-        }
-    )
-
-
 @app.get("/api/health")
 def health():
     return jsonify(
