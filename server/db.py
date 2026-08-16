@@ -123,6 +123,14 @@ SQLITE_SCHEMA = [
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE (visitor_id, day)
     );""",
+    """CREATE TABLE IF NOT EXISTS mail_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        ok INTEGER NOT NULL DEFAULT 0,
+        error TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -214,6 +222,14 @@ PG_SCHEMA = [
         day TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         UNIQUE (visitor_id, day)
+    );""",
+    """CREATE TABLE IF NOT EXISTS mail_log (
+        id SERIAL PRIMARY KEY,
+        recipient TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        ok INTEGER NOT NULL DEFAULT 0,
+        error TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
 ]
 
@@ -627,6 +643,30 @@ def delete_contact_message(message_id):
     conn.execute(_sql("DELETE FROM messages WHERE id = %s"), (message_id,))
     conn.commit()
     conn.close()
+
+
+# ---- mail log ----
+
+def log_email_attempt(recipient, subject, ok, error=""):
+    try:
+        conn = get_conn()
+        conn.execute(
+            _sql("INSERT INTO mail_log (recipient, subject, ok, error) VALUES (%s, %s, %s, %s)"),
+            (recipient or "", (subject or "")[:200], int(bool(ok)), (error or "")[:500]),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def get_mail_log(limit=20):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT recipient, subject, ok, error, created_at FROM mail_log ORDER BY id DESC LIMIT " + str(int(limit))
+    ).fetchall()
+    conn.close()
+    return all_rows(rows)
 
 
 # ---- page views / traffic ----

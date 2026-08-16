@@ -668,15 +668,21 @@ function loadMailStatus() {
     .then((s) => {
       const wrap = document.getElementById("mailStatusWrap");
       if (!wrap) return;
-      if (s.smtp_configured && s.admin_email_set) {
+      const text = document.getElementById("mailStatusText");
+      const failed = (s.last_attempts || []).filter((a) => !a.ok);
+      if (s.smtp_configured && s.admin_email_set && failed.length === 0) {
         wrap.classList.add("d-none");
         return;
       }
-      const text = document.getElementById("mailStatusText");
       if (text) {
-        text.textContent = s.smtp_configured
-          ? "Keine Admin-E-Mail (ADMIN_EMAIL) gesetzt."
-          : "SMTP ist nicht konfiguriert – Bestell- und Statusmails an Kunden werden nicht versendet.";
+        if (!s.smtp_configured) {
+          text.textContent = "SMTP ist nicht konfiguriert (Host " + (s.host || "?") + ") – Bestell- und Statusmails werden nicht versendet.";
+        } else if (!s.admin_email_set) {
+          text.textContent = "Keine Admin-E-Mail (ADMIN_EMAIL) gesetzt.";
+        } else {
+          const last = failed[0];
+          text.textContent = "Letzter Mailversand fehlgeschlagen (" + (last.recipient || "?") + "): " + (last.error || "unbekannter Fehler");
+        }
       }
       wrap.classList.remove("d-none");
     })

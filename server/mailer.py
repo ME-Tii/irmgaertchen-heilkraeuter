@@ -16,6 +16,7 @@ def email_enabled():
 
 def _send(subject, to, text):
     if not email_enabled():
+        _log(to, subject, False, "SMTP nicht konfiguriert")
         return False
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -28,11 +29,22 @@ def _send(subject, to, text):
             if SMTP_USER:
                 server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
+        _log(to, subject, True, "")
         return True
     except Exception as e:
         # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
         print(f"[mailer] Versand fehlgeschlagen: {e}")
+        _log(to, subject, False, str(e))
         return False
+
+
+def _log(to, subject, ok, error):
+    try:
+        import db
+
+        db.log_email_attempt(to, subject, ok, error)
+    except Exception:
+        pass
 
 
 def notify_admin_order(order_no, total_euro, delivery_text, customer=None):

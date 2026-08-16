@@ -953,6 +953,10 @@ def admin_mail_status():
             "smtp_configured": mailer.email_enabled(),
             "admin_email_set": bool(mailer.ADMIN_EMAIL),
             "from": mailer.SMTP_FROM,
+            "host": mailer.SMTP_HOST,
+            "port": mailer.SMTP_PORT,
+            "webhook_secret_set": bool(STRIPE_WEBHOOK_SECRET),
+            "last_attempts": db.get_mail_log(10),
         }
     )
 
