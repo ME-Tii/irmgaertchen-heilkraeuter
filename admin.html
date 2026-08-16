@@ -100,6 +100,18 @@
         </div>
 
         <div id="ordersTableWrap">
+          <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+            <label for="ordersSort" class="form-label small text-muted mb-0">Sortieren:</label>
+            <select id="ordersSort" class="form-select form-select-sm w-auto">
+              <option value="newest" selected>Neueste zuerst</option>
+              <option value="oldest">Älteste zuerst</option>
+              <option value="name_asc">Name (A–Z)</option>
+              <option value="name_desc">Name (Z–A)</option>
+              <option value="id_asc">Bestellnr. aufsteigend</option>
+              <option value="id_desc">Bestellnr. absteigend</option>
+              <option value="status">Nach Status</option>
+            </select>
+          </div>
           <div class="table-responsive">
             <table class="table table-striped align-middle">
               <thead>

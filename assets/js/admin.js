@@ -191,8 +191,54 @@ function contactCell(o) {
   );
 }
 
+function orderSortKey(o) {
+  const s = o.status || "";
+  const rank = STATUSES.indexOf(s) >= 0 ? STATUSES.indexOf(s) : STATUSES_SHIPPING.indexOf(s);
+  return rank >= 0 ? rank : 99;
+}
+
+function sortOrders(list) {
+  const mode = window.ADMIN_ORDERS_SORT || "newest";
+  const sorted = list.slice();
+  const byDate = (a, b) => new Date(b.created_at) - new Date(a.created_at);
+  const byId = (a, b) => {
+    const na = parseInt(String(a.order_no || "").replace(/\D/g, ""), 10) || 0;
+    const nb = parseInt(String(b.order_no || "").replace(/\D/g, ""), 10) || 0;
+    return na - nb;
+  };
+  const byName = (a, b) => {
+    const na = String(a.customerName || a.user || "").toLowerCase();
+    const nb = String(b.customerName || b.user || "").toLowerCase();
+    return na.localeCompare(nb, "de");
+  };
+  switch (mode) {
+    case "oldest":
+      return sorted.sort((a, b) => byDate(a, b) * -1);
+    case "name_asc":
+      return sorted.sort((a, b) => byName(a, b) || byDate(b, a));
+    case "name_desc":
+      return sorted.sort((a, b) => byName(b, a) || byDate(b, a));
+    case "id_asc":
+      return sorted.sort((a, b) => byId(a, b) || byDate(b, a));
+    case "id_desc":
+      return sorted.sort((a, b) => byId(b, a) || byDate(b, a));
+    case "status":
+      return sorted.sort((a, b) => orderSortKey(a) - orderSortKey(b) || byDate(b, a));
+    default:
+      return sorted.sort(byDate);
+  }
+}
+
+const ordersSortEl = document.getElementById("ordersSort");
+if (ordersSortEl) {
+  ordersSortEl.addEventListener("change", () => {
+    window.ADMIN_ORDERS_SORT = ordersSortEl.value;
+    renderDashboard();
+  });
+}
+
 function renderDashboard() {
-  const orders = window.ADMIN_ORDERS || [];
+  const orders = sortOrders(window.ADMIN_ORDERS || []);
   const body = document.getElementById("ordersBody");
   const noOrders = document.getElementById("noOrders");
   const tableWrap = document.getElementById("ordersTableWrap");
