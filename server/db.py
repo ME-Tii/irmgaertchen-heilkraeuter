@@ -1,9 +1,17 @@
 import os
+import hashlib
 import sqlite3
 import json
 import time
 
 from products import CATALOG
+
+SESSION_TTL = 30 * 24 * 3600  # 30 Tage
+
+
+def _hash_token(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 
 # Lokal: SQLite (shop.db). Auf Render/Produktion: PostgreSQL über DATABASE_URL.
 DB_PATH = os.environ.get(
@@ -47,6 +55,7 @@ SQLITE_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id),
+        expires_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
     """CREATE TABLE IF NOT EXISTS products (
@@ -147,6 +156,7 @@ PG_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TEXT,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
     """CREATE TABLE IF NOT EXISTS products (
@@ -278,6 +288,12 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE sessions ADD COLUMN expires_at TEXT"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    prune_sessions(conn)
     for slug, info in CATALOG.items():
         conn.execute(
             _sql("UPDATE products SET image = %s WHERE slug = %s AND (image = '' OR image IS NULL)"),
@@ -355,11 +371,35 @@ def set_admin_role(username):
 
 # ---- sessions ----
 
+def _now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def prune_sessions(conn=None):
+    close = conn is None
+    conn = conn or get_conn()
+    try:
+        conn.execute(
+            _sql("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < %s"),
+            (_now_iso(),),
+        )
+        conn.commit()
+    finally:
+        if close:
+            conn.close()
+
+
 def get_user_by_token(token):
+    if not token:
+        return None
+    prune_sessions()
     conn = get_conn()
     row = conn.execute(
-        _sql("SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = %s"),
-        (token,),
+        _sql(
+            "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
+            "WHERE s.token = %s AND (s.expires_at IS NULL OR s.expires_at > %s)"
+        ),
+        (_hash_token(token), _now_iso()),
     ).fetchone()
     conn.close()
     return row_to_dict(row)
@@ -367,9 +407,10 @@ def get_user_by_token(token):
 
 def create_session(token, user_id):
     conn = get_conn()
+    expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + SESSION_TTL))
     conn.execute(
-        _sql("INSERT INTO sessions (token, user_id) VALUES (%s, %s)"),
-        (token, user_id),
+        _sql("INSERT INTO sessions (token, user_id, expires_at) VALUES (%s, %s, %s)"),
+        (_hash_token(token), user_id, expires_at),
     )
     conn.commit()
     conn.close()
@@ -377,7 +418,7 @@ def create_session(token, user_id):
 
 def delete_session(token):
     conn = get_conn()
-    conn.execute(_sql("DELETE FROM sessions WHERE token = %s"), (token,))
+    conn.execute(_sql("DELETE FROM sessions WHERE token = %s"), (_hash_token(token),))
     conn.commit()
     conn.close()
 
@@ -399,6 +440,13 @@ def get_password_reset(token):
     row = conn.execute(_sql("SELECT * FROM password_resets WHERE token = %s"), (token,)).fetchone()
     conn.close()
     return row_to_dict(row)
+
+
+def clear_password_resets(user_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM password_resets WHERE user_id = %s"), (user_id,))
+    conn.commit()
+    conn.close()
 
 
 def consume_password_reset(token):

@@ -6,6 +6,8 @@ import calendar
 import secrets
 import hmac
 import hashlib
+import re
+import threading
 import zipfile
 from xml.sax.saxutils import escape
 
@@ -81,6 +83,64 @@ def bearer_token():
     return ""
 
 
+def _client_ip():
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _is_valid_email(email):
+    return bool(EMAIL_RE.match(email)) and len(email) <= 254
+
+
+def _clean_text(value, max_len):
+    value = (value or "").strip()
+    return value.replace("\x00", "")[:max_len]
+
+
+# ---------------------------------------------------------------- rate limiting
+
+# Einfacher In-Memory-Limiter (pro Prozess; gunicorn: mehrere Worker => Grenze je Worker).
+_rate_lock = threading.Lock()
+_rate_hits = {}
+
+
+def _rate_limit(bucket, limit, window):
+    global _rate_hits
+    now = time.time()
+    key = (bucket, _client_ip())
+    with _rate_lock:
+        hits = [t for t in _rate_hits.get(key, []) if now - t < window]
+        if len(hits) >= limit:
+            _rate_hits[key] = hits
+            return False
+        hits.append(now)
+        _rate_hits[key] = hits
+        if len(_rate_hits) > 10000:
+            cutoff = now - max(window, 3600)
+            _rate_hits = {k: [t for t in v if t > cutoff] for k, v in _rate_hits.items()}
+        return True
+
+
+def _parse_price_cents(raw):
+    try:
+        val = float(raw)
+        if not val or val != val or val in (float("inf"), float("-inf")):
+            return None
+        cents = int(round(val * 100))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if cents < 0 or cents > 10_000_000_000:
+        return None
+    return cents
+
+
 def require_auth():
     user = db.get_user_by_token(bearer_token()) if bearer_token() else None
     if not user:
@@ -110,6 +170,7 @@ def handle_404(e):
 
 @app.errorhandler(500)
 def handle_500(e):
+    app.logger.exception("Interner Serverfehler bei %s", request.path)
     if request.path.startswith("/api/"):
         return err("Interner Serverfehler.", 500)
     raise e
@@ -185,13 +246,42 @@ def gen_order_no():
 
 
 @app.after_request
+def add_security_headers(response):
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+@app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin", "")
-    if origin:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Vary"] = "Origin"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    if not origin:
+        return response
+    allowed = {SITE_URL, f"https://{request.host}", f"http://{request.host}"}
+    if origin not in allowed:
+        return response
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
 
 
@@ -303,12 +393,18 @@ def product_page(slug):
 
 @app.post("/api/register")
 def register():
+    if not _rate_limit("register", 5, 3600):
+        return err("Zu viele Registrierungen. Bitte später erneut versuchen.", 429)
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or "").strip()
-    email = (data.get("email") or "").strip()
+    username = _clean_text(data.get("username"), 50)
+    email = _clean_text(data.get("email"), 254)
     password = data.get("password") or ""
     if not username or len(password) < 6:
         return err("Bitte Benutzername und ein Passwort mit mindestens 6 Zeichen angeben.", 400)
+    if len(password) > 128:
+        return err("Das Passwort ist zu lang.", 400)
+    if email and not _is_valid_email(email):
+        return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
     if db.get_user_by_username(username):
         return err("Dieser Benutzername ist bereits vergeben.", 400)
     user_id = db.create_user(username, email, generate_password_hash(password))
@@ -319,8 +415,10 @@ def register():
 
 @app.post("/api/login")
 def login():
+    if not _rate_limit("login", 10, 300):
+        return err("Zu viele Anmeldeversuche. Bitte kurz warten.", 429)
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or "").strip()
+    username = _clean_text(data.get("username"), 50)
     password = data.get("password") or ""
     user = db.get_user_by_username(username)
     if not user or not check_password_hash(user["password_hash"], password):
@@ -356,12 +454,16 @@ def msg_to_dict(m):
 
 @app.post("/api/contact")
 def contact():
+    if not _rate_limit("contact", 5, 600):
+        return err("Zu viele Nachrichten. Bitte später erneut versuchen.", 429)
     data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
-    email = (data.get("email") or "").strip()
-    message = (data.get("message") or "").strip()
+    name = _clean_text(data.get("name"), 100)
+    email = _clean_text(data.get("email"), 254)
+    message = _clean_text(data.get("message"), 2000)
     if not name or not email or not message:
         return err("Bitte Name, E-Mail und Nachricht angeben.", 400)
+    if not _is_valid_email(email):
+        return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
     user = require_auth()
     db.create_contact_message(name, email, message, user["id"] if user else None)
     mailer.notify_admin_contact(name, email, message)
@@ -390,12 +492,12 @@ def update_me():
     if not user:
         return err("Nicht angemeldet.", 401)
     data = request.get_json(silent=True) or {}
-    db.update_profile(
-        user["id"],
-        (data.get("name") or "").strip(),
-        (data.get("email") or "").strip(),
-        (data.get("phone") or "").strip(),
-    )
+    name = _clean_text(data.get("name"), 100)
+    email = _clean_text(data.get("email"), 254)
+    phone = _clean_text(data.get("phone"), 40)
+    if email and not _is_valid_email(email):
+        return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
+    db.update_profile(user["id"], name, email, phone)
     return jsonify({"ok": True})
 
 
@@ -406,10 +508,13 @@ RESET_TOKEN_TTL = 60 * 60
 
 @app.post("/api/forgot-password")
 def forgot_password():
+    if not _rate_limit("forgot", 5, 3600):
+        return err("Zu viele Anfragen. Bitte später erneut versuchen.", 429)
     data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
+    email = _clean_text(data.get("email"), 254).lower()
     user = db.get_user_by_email(email) if email else None
     if user:
+        db.clear_password_resets(user["id"])
         token = secrets.token_urlsafe(32)
         expires_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + RESET_TOKEN_TTL))
         db.create_password_reset(user["id"], token, expires_at)
@@ -423,11 +528,15 @@ def forgot_password():
 
 @app.post("/api/reset-password")
 def reset_password():
+    if not _rate_limit("reset", 5, 3600):
+        return err("Zu viele Anfragen. Bitte später erneut versuchen.", 429)
     data = request.get_json(silent=True) or {}
     token = (data.get("token") or "").strip()
     password = data.get("password") or ""
     if len(password) < 6:
         return err("Das Passwort muss mindestens 6 Zeichen haben.", 400)
+    if len(password) > 128:
+        return err("Das Passwort ist zu lang.", 400)
     rec = db.get_password_reset(token)
     if not rec or rec["used"]:
         return err("Der Link ist ungültig oder wurde bereits verwendet.", 400)
@@ -492,7 +601,14 @@ def create_checkout_session():
     subtotal_cents = 0
     for item in cart:
         slug = item.get("id")
-        qty = int(item.get("qty", 1))
+        if not isinstance(slug, str) or not slug or len(slug) > 120:
+            return err("Ungültiger Artikel.", 400)
+        try:
+            qty = int(item.get("qty", 1))
+        except (TypeError, ValueError):
+            return err("Ungültige Menge.", 400)
+        if qty < 1 or qty > 999:
+            return err("Ungültige Menge.", 400)
         product = db.get_product(slug)
         if not product or not product["visible"]:
             return err(f"Unbekannter Artikel: {slug}", 400)
@@ -760,10 +876,13 @@ def admin_update_order(order_no):
     if not order:
         return err("Bestellung nicht gefunden.", 404)
     if "status" in data:
-        db.update_order(order_no, {"status": data["status"]})
+        status = _clean_text(data["status"], 50)
+        if status not in ORDER_STATUSES:
+            return err("Ungültiger Status.", 400)
+        db.update_order(order_no, {"status": status})
         user = db.get_user_by_id(order["user_id"]) if order["user_id"] else None
         if user:
-            mailer.notify_customer_status(user["email"], order_no, data["status"])
+            mailer.notify_customer_status(user["email"], order_no, status)
     return jsonify({"ok": True})
 
 
@@ -884,17 +1003,28 @@ def admin_add_product():
         return bad
     data = request.get_json(silent=True) or {}
     slug = (data.get("id") or "").strip().lower().replace(" ", "-")
-    name = (data.get("name") or "").strip()
+    name = _clean_text(data.get("name"), 200)
     if not slug or not name:
         return err("Bitte Name und Artikel-ID angeben.", 400)
-    try:
-        price_cents = int(round(float(data.get("price", 0)) * 100))
-    except (TypeError, ValueError):
+    if not SLUG_RE.match(slug):
+        return err("Ungültige Artikel-ID (nur Kleinbuchstaben, Ziffern und Bindestriche).", 400)
+    price_cents = _parse_price_cents(data.get("price", 0))
+    if price_cents is None:
         return err("Ungültiger Preis.", 400)
     if db.get_product(slug):
         return err("Diese Artikel-ID existiert bereits.", 400)
     stock = data.get("stock")
-    db.add_product(slug, name, (data.get("category") or "Sonstiges").strip(), price_cents, stock, (data.get("desc") or "").strip(), (data.get("image") or "").strip())
+    if stock is not None and stock != "":
+        try:
+            stock = max(0, int(stock))
+        except (TypeError, ValueError):
+            return err("Ungültiger Lagerbestand.", 400)
+    category = _clean_text(data.get("category"), 100) or "Sonstiges"
+    desc = _clean_text(data.get("desc"), 2000)
+    image = _clean_text(data.get("image"), 200)
+    if image and not SAFE_FILENAME_RE.match(image):
+        return err("Ungültiger Bilddateiname.", 400)
+    db.add_product(slug, name, category, price_cents, stock, desc, image)
     return jsonify({"ok": True})
 
 
@@ -907,12 +1037,27 @@ def admin_update_product(slug):
     product = db.get_product(slug)
     if not product:
         return err("Produkt nicht gefunden.", 404)
-    name = (data.get("name") or product["name"]).strip()
-    category = (data.get("category") or product["category"]).strip()
-    price_cents = int(round(float(data.get("price", product["price_cents"] / 100)) * 100))
-    stock = data["stock"] if "stock" in data else product["stock"]
-    desc = (data.get("desc") if data.get("desc") is not None else product.get("desc") or "").strip()
-    image = (data.get("image") if data.get("image") is not None else product.get("image") or "").strip()
+    name = _clean_text(data.get("name", product["name"]), 200) or product["name"]
+    category = _clean_text(data.get("category", product["category"]), 100) or product["category"]
+    raw_price = data.get("price", product["price_cents"] / 100)
+    price_cents = _parse_price_cents(raw_price)
+    if price_cents is None:
+        return err("Ungültiger Preis.", 400)
+    if "stock" in data:
+        stock = data["stock"]
+        if stock is None or stock == "":
+            stock = None
+        else:
+            try:
+                stock = max(0, int(stock))
+            except (TypeError, ValueError):
+                return err("Ungültiger Lagerbestand.", 400)
+    else:
+        stock = product["stock"]
+    desc = _clean_text(data.get("desc", product.get("desc") or ""), 2000)
+    image = _clean_text(data.get("image", product.get("image") or ""), 200)
+    if image and not SAFE_FILENAME_RE.match(image):
+        return err("Ungültiger Bilddateiname.", 400)
     db.update_product(slug, name, category, price_cents, stock, desc, image)
     return jsonify({"ok": True})
 
@@ -925,6 +1070,8 @@ def admin_upload_product_image(slug):
     product = db.get_product(slug)
     if not product:
         return err("Produkt nicht gefunden.", 404)
+    if not slug or "/" in slug or "\\" in slug:
+        return err("Ungültige Artikel-ID.", 400)
     file = request.files.get("file")
     if not file or not file.filename:
         return err("Keine Datei angehängt.", 400)
@@ -933,9 +1080,13 @@ def admin_upload_product_image(slug):
         return err("Nur JPG, PNG, WebP oder GIF erlaubt.", 400)
     if file.content_length and file.content_length > 3 * 1024 * 1024:
         return err("Bild zu groß (max. 3 MB).", 400)
+    data = file.read(3 * 1024 * 1024 + 1)
+    if len(data) > 3 * 1024 * 1024:
+        return err("Bild zu groß (max. 3 MB).", 400)
     filename = slug + ext
     os.makedirs(IMG_DIR, exist_ok=True)
-    file.save(os.path.join(IMG_DIR, filename))
+    with open(os.path.join(IMG_DIR, filename), "wb") as out:
+        out.write(data)
     db.set_product_image(slug, filename)
     return jsonify({"ok": True, "image": filename})
 
@@ -1012,16 +1163,23 @@ def admin_restore_backup():
     raw = file.read()
     if not raw:
         return err("Die Datei ist leer.", 400)
+    if len(raw) > 50 * 1024 * 1024:
+        return err("Backup-Datei zu groß (max. 50 MB).", 400)
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
         return err("Keine gültige ZIP-Datei.", 400)
     if zf.testzip() is not None:
         return err("Backup-Datei ist beschädigt.", 400)
-    names = set(zf.namelist())
+    names = zf.namelist()
+    if len(names) > 5000:
+        return err("Backup enthält zu viele Dateien.", 400)
+    names = set(names)
     if "backup.json" not in names:
         return err("Ungültige Sicherung: backup.json fehlt.", 400)
     try:
+        if zf.getinfo("backup.json").file_size > 25 * 1024 * 1024:
+            return err("backup.json ist zu groß.", 400)
         payload = json.loads(zf.read("backup.json").decode("utf-8"))
         data = payload.get("tables") or {}
     except Exception:
@@ -1040,6 +1198,9 @@ def admin_restore_backup():
         if not base or not base.lower().endswith(tuple(ALLOWED_IMAGE_EXT)):
             continue
         try:
+            info = zf.getinfo(name)
+            if info.file_size > 3 * 1024 * 1024:
+                continue
             with open(os.path.join(IMG_DIR, base), "wb") as out:
                 out.write(zf.read(name))
             img_count += 1

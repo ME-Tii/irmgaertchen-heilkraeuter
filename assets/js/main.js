@@ -30,7 +30,8 @@ function esc(s) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function parseApiResponse(res) {
@@ -285,20 +286,23 @@ function renderShop(category) {
           : '<span class="badge bg-success w-100 mb-2">' + stock.text + "</span>"
         : "";
       const disabled = stock && stock.out ? " disabled" : "";
+      const pName = esc(p.name || "");
+      const pDesc = esc(p.desc || "");
+      const pId = esc(p.id || "");
       return `
       <div class="col">
         <div class="card card-product h-100">
-          <a href="produkt/${p.id}"><img src="${imgFor(p.id, p)}" class="card-img-top" alt="${p.name}"></a>
+          <a href="produkt/${pId}"><img src="${imgFor(p.id, p)}" class="card-img-top" alt="${pName}"></a>
           <span class="badge badge-bio position-absolute top-0 start-0 m-2">Naturland Bio</span>
           <div class="card-body d-flex flex-column">
-            <h5 class="card-title"><a href="produkt/${p.id}" class="text-decoration-none text-dark">${p.name}</a></h5>
-            <p class="card-text text-muted small flex-grow-1">${p.desc}</p>
+            <h5 class="card-title"><a href="produkt/${pId}" class="text-decoration-none text-dark">${pName}</a></h5>
+            <p class="card-text text-muted small flex-grow-1">${pDesc}</p>
             ${stockBadge}
             <div class="d-flex justify-content-between align-items-center mt-2">
               <span class="price">${p.price.toFixed(2).replace(".", ",")} €</span>
-              <button class="btn btn-irm btn-sm add-to-cart" data-id="${p.id}"${disabled}>In den Warenkorb</button>
+              <button class="btn btn-irm btn-sm add-to-cart" data-id="${pId}"${disabled}>In den Warenkorb</button>
             </div>
-            <a class="btn btn-outline-irm btn-sm w-100 mt-2" href="produkt/${p.id}">Details ansehen</a>
+            <a class="btn btn-outline-irm btn-sm w-100 mt-2" href="produkt/${pId}">Details ansehen</a>
           </div>
         </div>
       </div>`;
@@ -333,20 +337,22 @@ function renderCart() {
       const p = getProduct(i.id);
       if (!p) return "";
       const lineTotal = p.price * i.qty;
+      const pName = esc(p.name || "");
+      const pId = esc(i.id || "");
       return `
         <tr>
-          <td><img src="${imgFor(i.id, p)}" alt="${p.name}" style="width:60px;height:45px;object-fit:cover;" class="rounded"></td>
-          <td>${p.name}</td>
+          <td><img src="${imgFor(i.id, p)}" alt="${pName}" style="width:60px;height:45px;object-fit:cover;" class="rounded"></td>
+          <td>${pName}</td>
           <td>${p.price.toFixed(2).replace(".", ",")} €</td>
           <td>
             <div class="input-group input-group-sm" style="max-width:120px;">
-              <button class="btn btn-outline-secondary qty-minus" data-id="${i.id}">-</button>
+              <button class="btn btn-outline-secondary qty-minus" data-id="${pId}">-</button>
               <span class="form-control text-center">${i.qty}</span>
-              <button class="btn btn-outline-secondary qty-plus" data-id="${i.id}">+</button>
+              <button class="btn btn-outline-secondary qty-plus" data-id="${pId}">+</button>
             </div>
           </td>
           <td class="fw-semibold">${lineTotal.toFixed(2).replace(".", ",")} €</td>
-          <td><button class="btn btn-sm btn-outline-danger cart-remove" data-id="${i.id}">Entfernen</button></td>
+          <td><button class="btn btn-sm btn-outline-danger cart-remove" data-id="${pId}">Entfernen</button></td>
         </tr>`;
     })
     .join("");
@@ -617,13 +623,15 @@ function renderOrders() {
               .toFixed(2)
               .replace(".", ",")} €</td></tr>`
           : "";
-      const deliveryInfo =
+      const deliveryInfo = esc(
         o.delivery && o.delivery.method === "delivery"
           ? `Versand an: ${[o.delivery.street, o.delivery.zip && o.delivery.city ? o.delivery.zip + " " + o.delivery.city : o.delivery.city || ""]
               .filter(Boolean)
               .join(", ")}`
-          : "Abholung im Gärtchen";
+          : "Abholung im Gärtchen"
+      );
       const isDelivery = o.delivery && o.delivery.method === "delivery";
+      const orderNoEsc = esc(o.order_no);
       const confirmBlock = o.customerConfirmed
         ? `<div class="mt-3">
             <span class="badge bg-success"><i class="bi bi-check2-circle"></i> ${
@@ -631,7 +639,7 @@ function renderOrders() {
             } – bestätigt am ${o.customerConfirmedAt ? new Date(o.customerConfirmedAt).toLocaleDateString("de-DE") : "?"}</span>
           </div>`
         : `<div class="mt-3">
-            <button type="button" class="btn btn-sm btn-outline-success order-confirm" data-order="${o.order_no}" title="Nach Erhalt/Abholung bestätigen">
+            <button type="button" class="btn btn-sm btn-outline-success order-confirm" data-order="${orderNoEsc}" title="Nach Erhalt/Abholung bestätigen">
               <i class="bi bi-check2-circle"></i> ${isDelivery ? "Als erhalten bestätigen" : "Als abgeholt bestätigen"}
             </button>
           </div>`;
@@ -643,12 +651,12 @@ function renderOrders() {
           }</span></div>`
         : o.customerConfirmed
         ? `<div class="mt-2">
-            <button type="button" class="btn btn-sm btn-outline-danger return-toggle" data-order="${o.order_no}">
+            <button type="button" class="btn btn-sm btn-outline-danger return-toggle" data-order="${orderNoEsc}">
               <i class="bi bi-arrow-counterclockwise"></i> Rückgabe anfordern
             </button>
             <div class="return-form d-none mt-2">
               <textarea class="form-control form-control-sm return-reason" rows="2" placeholder="Grund der Rückgabe (optional)"></textarea>
-              <button type="button" class="btn btn-sm btn-danger mt-2 return-submit" data-order="${o.order_no}">Rückgabe anfragen</button>
+              <button type="button" class="btn btn-sm btn-danger mt-2 return-submit" data-order="${orderNoEsc}">Rückgabe anfragen</button>
               <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle"></i> Die Rücksendekosten trägt der Kunde, außer die Ware ist bei uns fehlerhaft. Wir melden uns zur Absprache.</p>
             </div>
           </div>`
@@ -656,7 +664,7 @@ function renderOrders() {
       return `
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <strong>Bestellung ${o.order_no}</strong>
+          <strong>Bestellung ${orderNoEsc}</strong>
           <span class="badge badge-bio">${orderStatus(o)}</span>
         </div>
         <div class="card-body">
@@ -670,7 +678,7 @@ function renderOrders() {
               ${o.items
                 .map(
                   (it) =>
-                    `<tr><td>${it.name}</td><td>${it.qty}</td><td>${it.price
+                    `<tr><td>${esc(it.name)}</td><td>${it.qty}</td><td>${it.price
                       .toFixed(2)
                       .replace(".", ",")} €</td><td class="text-end">${it.total
                       .toFixed(2)
