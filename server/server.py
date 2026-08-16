@@ -569,6 +569,32 @@ def _verify_webhook(payload, sig_header):
         return False
 
 
+def _complete_paid_order(order, session_id, payment_intent):
+    if order["status"] != "Zahlung ausstehend":
+        return
+    db.update_order(
+        order["order_no"],
+        {
+            "status": "Eingegangen",
+            "stripe_session_id": session_id,
+            "stripe_payment_intent": payment_intent,
+        },
+    )
+    db.decrement_stock(order["items"])
+    user = db.get_user_by_id(order["user_id"]) if order["user_id"] else None
+    mailer.notify_admin_order(
+        order["order_no"],
+        f"{order['total']:.2f}".replace(".", ","),
+        "Versand an " + order["delivery"]["street"] if order["delivery"]["method"] == "delivery" else "Abholung",
+        {
+            "name": order.get("customerName") or (user["name"] if user else ""),
+            "email": order.get("customerEmail") or (user["email"] if user else ""),
+            "phone": order.get("customerPhone") or (user["phone"] if user else ""),
+        },
+    )
+    mailer.notify_customer_order(order)
+
+
 @app.post("/api/stripe/webhook")
 def stripe_webhook():
     payload = request.get_data()
@@ -592,29 +618,8 @@ def stripe_webhook():
         order = db.get_order(order_no) if order_no else db.get_order_by_session(session_id)
         if order:
             order = order_to_dict(order)
-        if order and order["status"] == "Zahlung ausstehend":
-            db.update_order(
-                order["order_no"],
-                {
-                    "status": "Eingegangen",
-                    "stripe_session_id": session_id,
-                    "stripe_payment_intent": obj.get("payment_intent"),
-                },
-            )
-            db.decrement_stock(order["items"])
-            user = db.get_user_by_id(order["user_id"]) if order["user_id"] else None
-            mailer.notify_admin_order(
-                order["order_no"],
-                f"{order['total']:.2f}".replace(".", ","),
-                "Versand an " + order["delivery"]["street"] if order["delivery"]["method"] == "delivery" else "Abholung",
-                {
-                    "name": order.get("customerName") or (user["name"] if user else ""),
-                    "email": order.get("customerEmail") or (user["email"] if user else ""),
-                    "phone": order.get("customerPhone") or (user["phone"] if user else ""),
-                },
-            )
-            if user:
-                mailer.notify_customer_order(order)
+        if order:
+            _complete_paid_order(order, session_id, obj.get("payment_intent"))
         return jsonify({"received": True})
 
     if etype == "charge.refunded":
@@ -663,7 +668,16 @@ def order_by_session(session_id):
     order = db.get_order_by_session(session_id)
     if not order or order["user_id"] != user["id"]:
         return err("Bestellung nicht gefunden.", 404)
-    return jsonify({"order": order_to_dict(order)})
+    order = order_to_dict(order)
+    if order["status"] == "Zahlung ausstehend":
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            if getattr(session, "payment_status", "") == "paid":
+                _complete_paid_order(order, session_id, getattr(session, "payment_intent", None))
+                order = order_to_dict(db.get_order(order["order_no"]))
+        except Exception:
+            pass
+    return jsonify({"order": order})
 
 
 @app.post("/api/orders/confirm")
