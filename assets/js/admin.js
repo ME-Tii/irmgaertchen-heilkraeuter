@@ -191,6 +191,16 @@ function contactCell(o) {
   );
 }
 
+function filterOrders(list) {
+  const q = (window.ADMIN_ORDERS_QUERY || "").trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((o) => {
+    const name = String(o.customerName || o.user || "").toLowerCase();
+    const id = String(o.order_no || "").toLowerCase();
+    return name.includes(q) || id.includes(q);
+  });
+}
+
 function orderSortKey(o) {
   const s = o.status || "";
   const rank = STATUSES.indexOf(s) >= 0 ? STATUSES.indexOf(s) : STATUSES_SHIPPING.indexOf(s);
@@ -237,8 +247,16 @@ if (ordersSortEl) {
   });
 }
 
+const ordersSearchEl = document.getElementById("ordersSearch");
+if (ordersSearchEl) {
+  ordersSearchEl.addEventListener("input", () => {
+    window.ADMIN_ORDERS_QUERY = ordersSearchEl.value;
+    renderDashboard();
+  });
+}
+
 function renderDashboard() {
-  const orders = sortOrders(window.ADMIN_ORDERS || []);
+  const orders = sortOrders(filterOrders(window.ADMIN_ORDERS || []));
   const body = document.getElementById("ordersBody");
   const noOrders = document.getElementById("noOrders");
   const tableWrap = document.getElementById("ordersTableWrap");
@@ -249,7 +267,19 @@ function renderDashboard() {
   document.getElementById("statRevenue").textContent = fmtMoney(revenue);
 
   if (orders.length === 0) {
-    if (noOrders) noOrders.classList.remove("d-none");
+    if (noOrders) {
+      const hasOrders = (window.ADMIN_ORDERS || []).length > 0;
+      const emptyTitle = noOrders.querySelector("h4");
+      const emptyText = noOrders.querySelector("p");
+      if (hasOrders) {
+        if (emptyTitle) emptyTitle.textContent = "Keine Treffer";
+        if (emptyText) emptyText.textContent = "Keine Bestellung passt auf Ihre Suche.";
+      } else {
+        if (emptyTitle) emptyTitle.textContent = "Noch keine Bestellungen";
+        if (emptyText) emptyText.textContent = "Sobald Kunden über den Shop bestellen, erscheinen die Bestellungen hier.";
+      }
+      noOrders.classList.remove("d-none");
+    }
     if (tableWrap) tableWrap.classList.add("d-none");
     return;
   }
