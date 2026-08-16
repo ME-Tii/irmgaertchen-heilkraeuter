@@ -106,10 +106,12 @@ function switchTab(tab) {
   const inventory = document.getElementById("inventory");
   const messagesPanel = document.getElementById("messagesPanel");
   const statsPanel = document.getElementById("statsPanel");
+  const backupPanel = document.getElementById("backupPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
   if (statsPanel) statsPanel.classList.toggle("d-none", tab !== "stats");
+  if (backupPanel) backupPanel.classList.toggle("d-none", tab !== "backup");
   try {
     if (tab === "inventory") renderInventory();
     if (tab === "messages") renderMessages();
@@ -890,4 +892,98 @@ function showToast(message) {
   const toast = new bootstrap.Toast(wrapper, { delay: 2500 });
   toast.show();
   wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
+}
+
+// ---------------------------------------------------------------- backup
+
+function backupShowMsg(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = "alert mt-3 mb-0" + (type ? " alert-" + type : "");
+  el.textContent = msg;
+  el.classList.remove("d-none");
+}
+
+function createBackup() {
+  const btn = document.getElementById("backupCreateBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Backup wird erstellt…';
+  }
+  const headers = { Accept: "application/zip" };
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (token) headers.Authorization = "Bearer " + token;
+  fetch("api/admin/backup", { headers })
+    .then((res) => {
+      if (!res.ok) {
+        return res.json().then((d) => {
+          throw new Error(d.error || "Backup fehlgeschlagen.");
+        });
+      }
+      const cd = res.headers.get("Content-Disposition") || "";
+      let name = "irmgaertchen-backup.zip";
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) name = m[1];
+      return res.blob().then((blob) => ({ blob, name }));
+    })
+    .then(({ blob, name }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      backupShowMsg("backupMsg", "Backup heruntergeladen: " + name, "success");
+    })
+    .catch((err) => {
+      backupShowMsg("backupMsg", (err && err.message ? err.message : "Backup fehlgeschlagen."), "danger");
+    })
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-download"></i> Backup jetzt erstellen';
+      }
+    });
+}
+
+function restoreBackup() {
+  const input = document.getElementById("backupRestoreFile");
+  const file = input && input.files && input.files[0];
+  const confirmMsg =
+    "ACHTUNG: Diese Aktion ersetzt ALLE aktuellen Daten (Bestellungen, Kunden, Lager, " +
+    "Statistiken, Bilder) durch den Stand der Sicherung. Dies kann nicht rückgängig gemacht werden.\n\n" +
+    "Möchten Sie wirklich fortfahren?";
+  if (!file) {
+    backupShowMsg("backupRestoreMsg", "Bitte zuerst eine Backup-Datei (.zip) auswählen.", "warning");
+    return;
+  }
+  if (!confirm(confirmMsg)) return;
+  const btn = document.getElementById("backupRestoreBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Wird wiederhergestellt…';
+  }
+  adminUpload("api/admin/backup/restore", file)
+    .then((data) => {
+      if (data.new_token) localStorage.setItem(ADMIN_TOKEN_KEY, data.new_token);
+      const tables = (data.tables_restored || []).length;
+      backupShowMsg(
+        "backupRestoreMsg",
+        "Wiederherstellung abgeschlossen: " + tables + " Tabellen, " +
+        (data.images_restored || 0) + " Bilder. Seite wird neu geladen …",
+        "success"
+      );
+      setTimeout(() => location.reload(), 1500);
+    })
+    .catch((err) => {
+      backupShowMsg("backupRestoreMsg", (err && err.message ? err.message : "Wiederherstellung fehlgeschlagen."), "danger");
+    })
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-upload"></i> Sicherung einspielen';
+      }
+    });
 }

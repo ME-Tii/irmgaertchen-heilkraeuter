@@ -1,10 +1,12 @@
 import os
+import io
 import json
 import time
 import calendar
 import secrets
 import hmac
 import hashlib
+import zipfile
 from xml.sax.saxutils import escape
 
 
@@ -941,6 +943,107 @@ def admin_stats():
     if bad:
         return bad
     return jsonify(db.get_view_stats())
+
+
+# ---------------------------------------------------------------- backup
+
+@app.get("/api/admin/backup")
+def admin_backup():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    ts = time.strftime("%Y-%m-%d_%H%M%S", time.localtime())
+    db_type = "postgres" if os.environ.get("DATABASE_URL", "").strip() else "sqlite"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "backup.json",
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at": ts,
+                    "db": db_type,
+                    "tables": db.export_all_tables(),
+                },
+                ensure_ascii=False,
+            ),
+        )
+        zf.writestr(
+            "manifest.json",
+            json.dumps({"created_at": ts, "db": db_type, "schema_version": 1}, ensure_ascii=False),
+        )
+        for fname in sorted(os.listdir(IMG_DIR)):
+            path = os.path.join(IMG_DIR, fname)
+            if os.path.isfile(path) and fname.lower().endswith(tuple(ALLOWED_IMAGE_EXT)):
+                zf.write(path, f"assets/img/{fname}")
+    buf.seek(0)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="irmgaertchen-backup-{ts}.zip"'},
+    )
+
+
+@app.post("/api/admin/backup/restore")
+def admin_restore_backup():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    admin_user = require_admin()
+    file = request.files.get("file")
+    if not file:
+        return err("Keine Backup-Datei hochgeladen.", 400)
+    if not (file.filename or "").lower().endswith(".zip"):
+        return err("Bitte eine Backup-ZIP-Datei hochladen.", 400)
+    raw = file.read()
+    if not raw:
+        return err("Die Datei ist leer.", 400)
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile:
+        return err("Keine gültige ZIP-Datei.", 400)
+    if zf.testzip() is not None:
+        return err("Backup-Datei ist beschädigt.", 400)
+    names = set(zf.namelist())
+    if "backup.json" not in names:
+        return err("Ungültige Sicherung: backup.json fehlt.", 400)
+    try:
+        payload = json.loads(zf.read("backup.json").decode("utf-8"))
+        data = payload.get("tables") or {}
+    except Exception:
+        return err("backup.json ist nicht lesbar.", 400)
+    if not isinstance(data, dict):
+        return err("backup.json ist nicht lesbar.", 400)
+
+    db.import_all_tables(data)
+
+    img_count = 0
+    os.makedirs(IMG_DIR, exist_ok=True)
+    for name in names:
+        if not name.startswith("assets/img/") or name.endswith("/"):
+            continue
+        base = os.path.basename(name)
+        if not base or not base.lower().endswith(tuple(ALLOWED_IMAGE_EXT)):
+            continue
+        try:
+            with open(os.path.join(IMG_DIR, base), "wb") as out:
+                out.write(zf.read(name))
+            img_count += 1
+        except Exception:
+            pass
+
+    admin_id = admin_user["id"]
+    db.delete_user_sessions(admin_id)
+    token = secrets.token_hex(32)
+    db.create_session(token, admin_id)
+    return jsonify(
+        {
+            "ok": True,
+            "tables_restored": list(data.keys()),
+            "images_restored": img_count,
+            "new_token": token,
+        }
+    )
 
 
 @app.get("/api/health")

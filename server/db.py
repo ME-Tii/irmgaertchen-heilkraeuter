@@ -766,3 +766,57 @@ def get_daily_views(days=14):
         d = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1 - i) * 86400))
         out.append({"date": d, "count": by_day.get(d, 0)})
     return out
+
+
+# ---- Backup / Restore ----
+
+# Reihenfolge: parents zuerst (FK-sicher für INSERT), Kinder für DELETE rückwärts.
+BACKUP_TABLES = [
+    "users",
+    "products",
+    "sessions",
+    "orders",
+    "messages",
+    "password_resets",
+    "page_views",
+    "visitors",
+    "visitor_days",
+    "mail_log",
+]
+
+
+def export_all_tables():
+    conn = get_conn()
+    data = {}
+    for t in BACKUP_TABLES:
+        rows = conn.execute(_sql("SELECT * FROM " + t)).fetchall()
+        data[t] = [dict(r) for r in rows]
+    conn.close()
+    return data
+
+
+def import_all_tables(data):
+    conn = get_conn()
+    try:
+        for t in reversed(BACKUP_TABLES):
+            conn.execute(_sql("DELETE FROM " + t))
+        for t in BACKUP_TABLES:
+            for row in data.get(t) or []:
+                cols = list(row.keys())
+                col_sql = ", ".join('"%s"' % c for c in cols)
+                placeholders = ", ".join(["%s"] * len(cols))
+                conn.execute(
+                    _sql(f"INSERT INTO {t} ({col_sql}) VALUES ({placeholders})"),
+                    [row[c] for c in cols],
+                )
+        if USE_PG:
+            for t in BACKUP_TABLES:
+                conn.execute(
+                    f"SELECT setval(pg_get_serial_sequence('{t}', 'id'), COALESCE(MAX(id), 1)) FROM {t}"
+                )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

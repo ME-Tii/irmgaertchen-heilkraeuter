@@ -61,6 +61,7 @@
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="inventory" onclick="switchTab('inventory')"><i class="bi bi-box-seam"></i> Lager</button></li>
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="messages" onclick="switchTab('messages')"><i class="bi bi-envelope"></i> Nachrichten <span class="badge text-bg-danger rounded-pill d-none" id="msgCountBadge">0</span></button></li>
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="stats" onclick="switchTab('stats')"><i class="bi bi-graph-up"></i> Statistiken</button></li>
+        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="backup" onclick="switchTab('backup')"><i class="bi bi-hdd"></i> Sicherung</button></li>
       </ul>
 
       <div id="ordersPanel">
@@ -308,6 +309,38 @@
           </div>
         </div>
       </div>
+
+      <div id="backupPanel" class="d-none">
+        <div class="card">
+          <div class="card-header"><i class="bi bi-download"></i> Datensicherung erstellen</div>
+          <div class="card-body">
+            <p class="text-muted mb-3">
+              Erstellt eine Sicherung aller Daten (Produkte, Bestellungen, Kunden, Nachrichten,
+              Statistiken, Produktbilder) als ZIP-Datei. Die Datei enthält personenbezogene
+              Daten – bitte sicher aufbewahren.
+            </p>
+            <button class="btn btn-irm" type="button" id="backupCreateBtn" onclick="createBackup()">
+              <i class="bi bi-download"></i> Backup jetzt erstellen
+            </button>
+            <div id="backupMsg" class="alert d-none mt-3 mb-0" role="alert"></div>
+          </div>
+        </div>
+        <div class="card mt-4 border-danger">
+          <div class="card-header text-danger"><i class="bi bi-arrow-counterclockwise"></i> Sicherung wiederherstellen</div>
+          <div class="card-body">
+            <p class="text-muted mb-3">
+              <strong>Vorsicht:</strong> Beim Einspielen werden alle aktuellen Daten (Bestellungen,
+              Kunden, Lager, Statistiken, Bilder) durch den Stand der Sicherung ersetzt.
+              Dieser Vorgang kann nicht rückgängig gemacht werden.
+            </p>
+            <input type="file" class="form-control mb-3" id="backupRestoreFile" accept=".zip">
+            <button class="btn btn-danger" type="button" id="backupRestoreBtn" onclick="restoreBackup()">
+              <i class="bi bi-upload"></i> Sicherung einspielen
+            </button>
+            <div id="backupRestoreMsg" class="alert d-none mt-3 mb-0" role="alert"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -366,7 +399,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="assets/js/products.js?v=4"></script>
-  <script src="assets/js/admin.js?v=4"></script>
+  <script src="assets/js/products.js?v=5"></script>
+  <script src="assets/js/admin.js?v=5"></script>
 </body>
 </html>
