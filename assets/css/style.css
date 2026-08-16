@@ -235,7 +235,7 @@ section h2 {
 }
 
 #pageLoader img {
-  width: clamp(120px, 22vw, 180px);
+  width: clamp(150px, 30vw, 260px);
   height: auto;
   animation: loaderPulse 1.3s ease-in-out infinite;
 }
