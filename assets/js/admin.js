@@ -430,6 +430,8 @@ function refundOrder(orderNo, btn) {
 function loadMessages() {
   return adminApi("api/admin/messages").then((data) => {
     window.ADMIN_MESSAGES = data.messages || [];
+  }).catch((err) => {
+    showMsg("messagesMsg", err.message || "Nachrichten konnten nicht geladen werden.", "danger");
   });
 }
 
@@ -502,6 +504,8 @@ function renderMessages() {
 function loadInventory() {
   return adminApi("api/admin/products").then((data) => {
     window.ADMIN_PRODUCTS = data.products || [];
+  }).catch((err) => {
+    showMsg("inventoryMsg", err.message || "Lagerbestand konnte nicht geladen werden.", "danger");
   });
 }
 
