@@ -1,15 +1,4 @@
 const ADMIN_TOKEN_KEY = "irm_admin_token";
-const STATUSES = ["Eingegangen", "In Bearbeitung", "Bereit zur Abholung", "Versandt", "Abgeschlossen"];
-const STATUSES_SHIPPING = ["Eingegangen", "In Bearbeitung", "Versandt", "Abgeschlossen"];
-const STATUS_CLASS = {
-  "Zahlung ausstehend": "bg-secondary",
-  "Eingegangen": "bg-secondary",
-  "In Bearbeitung": "bg-primary",
-  "Bereit zur Abholung": "bg-warning text-dark",
-  "Versandt": "bg-info",
-  "Abgeschlossen": "bg-success",
-};
-
 function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -17,6 +6,21 @@ function esc(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+(function initPageLoader() {
+  const loader = document.getElementById("pageLoader");
+  if (!loader) return;
+  const hide = () => {
+    loader.classList.add("hidden");
+    setTimeout(() => loader.remove(), 600);
+  };
+  if (document.readyState === "complete") {
+    setTimeout(hide, 350);
+  } else {
+    window.addEventListener("load", () => setTimeout(hide, 350));
+    setTimeout(hide, 3000);
+  }
+})();
 
 function adminApi(path, method, body) {
   const headers = { Accept: "application/json", "Content-Type": "application/json" };
