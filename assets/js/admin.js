@@ -731,6 +731,7 @@ function renderStats() {
       : '<tr><td colspan="2" class="text-center text-muted py-4">Noch keine Besuche aufgezeichnet.</td></tr>';
   }
   renderViewsChart();
+  renderVisitorsChart();
 }
 
 function renderViewsChart() {
@@ -754,6 +755,45 @@ function renderViewsChart() {
           backgroundColor: "rgba(63, 107, 59, 0.75)",
           borderColor: "rgba(63, 107, 59, 1)",
           borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+function renderVisitorsChart() {
+  const canvas = document.getElementById("visitorsChart");
+  const s = window.ADMIN_STATS;
+  if (!canvas || !s || typeof Chart === "undefined") return;
+  const labels = (s.daily_visitors || []).map((d) => {
+    const p = d.date.split("-");
+    return p[2] + "." + p[1] + ".";
+  });
+  const counts = (s.daily_visitors || []).map((d) => d.count);
+  if (window.__visitorsChart) window.__visitorsChart.destroy();
+  window.__visitorsChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Einzigartige Besucher",
+          data: counts,
+          backgroundColor: "rgba(23, 111, 142, 0.15)",
+          borderColor: "rgba(23, 111, 142, 1)",
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
         },
       ],
     },

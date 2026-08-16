@@ -669,6 +669,19 @@ def record_visitor(visitor_id, day):
     conn.close()
 
 
+def get_daily_visitors(days=14):
+    rows = []
+    conn = get_conn()
+    for i in range(days, 0, -1):
+        d = time.strftime("%Y-%m-%d", time.gmtime(time.time() - i * 86400))
+        r = conn.execute(
+            _sql("SELECT COUNT(*) AS c FROM visitor_days WHERE day = %s"), (d,)
+        ).fetchone()
+        rows.append({"date": d, "count": r["c"]})
+    conn.close()
+    return rows
+
+
 def get_view_stats():
     conn = get_conn()
     today = time.strftime("%Y-%m-%d", time.gmtime())
@@ -702,6 +715,7 @@ def get_view_stats():
         "unique_week": unique_week,
         "top_pages": [{"path": r["path"], "count": r["c"]} for r in top_rows],
         "daily": get_daily_views(14),
+        "daily_visitors": get_daily_visitors(14),
     }
 
 
