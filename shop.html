@@ -95,7 +95,20 @@
   </header>
 
   <main class="container my-4">
-    <div class="btn-group flex-wrap mb-4" id="categoryFilters" role="group" aria-label="Kategorien"></div>
+    <div class="row g-3 mb-4 align-items-center">
+      <div class="col-md-5 col-lg-4">
+        <form id="searchForm" role="search">
+          <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="search" class="form-control" id="searchInput" placeholder="Produkte suchen…" aria-label="Produkte suchen" autocomplete="off">
+            <button class="btn btn-outline-secondary" type="button" id="searchClear" title="Suche zurücksetzen"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </form>
+      </div>
+      <div class="col-md-7 col-lg-8">
+        <div class="btn-group flex-wrap" id="categoryFilters" role="group" aria-label="Kategorien"></div>
+      </div>
+    </div>
 
     <div class="alert alert-warning" role="alert">
       <i class="bi bi-calendar-event"></i> Heilkräuter und Tees sind saisonal erhältlich – die meisten Kräuterpflanzen gibt es durchgehend. Senden Sie uns Ihre Bestellung über den Warenkorb – wir melden uns zur Abholung bzw. zum Abholtermin.

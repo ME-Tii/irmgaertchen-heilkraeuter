@@ -228,6 +228,7 @@ function renderCategories() {
     btn.addEventListener("click", () => {
       wrap.querySelectorAll("[data-filter]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
+      document.body.dataset.category = btn.dataset.filter;
       renderShop(btn.dataset.filter);
     });
   });
@@ -236,9 +237,32 @@ function renderCategories() {
 function renderShop(category) {
   const grid = document.getElementById("productGrid");
   if (!grid) return;
-  const list = category && category !== "alle"
+  const query = (window.SHOP_SEARCH || "").trim().toLowerCase();
+  let list = category && category !== "alle"
     ? window.PRODUCTS.filter((p) => p.category === category)
-    : window.PRODUCTS;
+    : window.PRODUCTS.slice();
+  if (query) {
+    list = list.filter((p) =>
+      (p.name + " " + (p.desc || "") + " " + (p.category || "")).toLowerCase().includes(query)
+    );
+  }
+  if (list.length === 0) {
+    grid.innerHTML = '<div class="col-12 text-center py-5 text-muted">' +
+      '<i class="bi bi-search display-3 d-block mb-3"></i>' +
+      "<h4>Keine Produkte gefunden</h4>" +
+      '<p class="mb-1">Für die Suche "' + esc(query || "") + '" gibt es keine Treffer.</p>' +
+      "<button type=\"button\" class=\"btn btn-outline-irm mt-2\" id=\"searchResetBtn\">Suche zurücksetzen</button></div>";
+    const resetBtn = grid.querySelector("#searchResetBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        const input = document.getElementById("searchInput");
+        if (input) input.value = "";
+        window.SHOP_SEARCH = "";
+        renderShop(document.body.dataset.category);
+      });
+    }
+    return;
+  }
   grid.innerHTML = list
     .map((p) => {
       const stock = stockInfo(p.id);
@@ -759,6 +783,27 @@ document.addEventListener("DOMContentLoaded", () => {
   const productAddBtn = document.getElementById("productAddToCart");
   if (productAddBtn) {
     productAddBtn.addEventListener("click", () => addToCart(productAddBtn.dataset.id));
+  }
+
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      window.SHOP_SEARCH = searchInput.value;
+      renderShop(document.body.dataset.category);
+    });
+    const searchClear = document.getElementById("searchClear");
+    if (searchClear) {
+      searchClear.addEventListener("click", () => {
+        searchInput.value = "";
+        window.SHOP_SEARCH = "";
+        renderShop(document.body.dataset.category);
+        searchInput.focus();
+      });
+    }
+    const searchForm = document.getElementById("searchForm");
+    if (searchForm) {
+      searchForm.addEventListener("submit", (e) => e.preventDefault());
+    }
   }
 
   loadProducts().then(() => {
