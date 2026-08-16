@@ -48,7 +48,10 @@
     <div id="dashboard" class="d-none">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
         <h1 class="h3 mb-0"><i class="bi bi-clipboard-check"></i> Verwaltung</h1>
-        <button class="btn btn-outline-irm" type="button" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Aktualisieren</button>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-irm mail-test-btn" type="button"><i class="bi bi-envelope-check"></i> Testmail senden</button>
+          <button class="btn btn-outline-irm" type="button" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Aktualisieren</button>
+        </div>
       </div>
 
       <ul class="nav nav-pills mb-4">
@@ -61,7 +64,7 @@
       <div id="mailStatusWrap" class="d-none mb-4">
         <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2 mb-0" role="alert">
           <div><i class="bi bi-envelope-exclamation"></i> <strong>E-Mail-Versand nicht eingerichtet.</strong> <span id="mailStatusText"></span></div>
-          <button class="btn btn-sm btn-outline-irm" type="button" id="mailTestBtn"><i class="bi bi-envelope-check"></i> Testmail senden</button>
+          <button class="btn btn-sm btn-outline-irm mail-test-btn" type="button"><i class="bi bi-envelope-check"></i> Testmail senden</button>
         </div>
       </div>
 

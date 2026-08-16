@@ -619,10 +619,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  const mailTestBtn = document.getElementById("mailTestBtn");
-  if (mailTestBtn) {
-    mailTestBtn.addEventListener("click", sendTestMail);
-  }
+  document.querySelectorAll(".mail-test-btn").forEach((btn) => {
+    btn.addEventListener("click", sendTestMail);
+  });
 
   const addProductForm = document.getElementById("addProductForm");
   if (addProductForm) {
