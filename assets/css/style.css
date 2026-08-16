@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap");
+
 :root {
   --irm-green: #3f6b3b;
   --irm-green-dark: #2f4f2c;
@@ -6,13 +8,13 @@
 }
 
 body {
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   color: #2b2b2b;
   background-color: #faf9f5;
 }
 
 h1, h2, h3, h4, h5, .navbar-brand {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Fraunces", Georgia, "Times New Roman", serif;
 }
 
 .navbar-irm {
@@ -183,7 +185,7 @@ section h2 {
 }
 
 .customer-logo-text {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Fraunces", Georgia, "Times New Roman", serif;
   font-weight: 700;
   font-size: 1.05rem;
   color: #555;
@@ -218,4 +220,57 @@ section h2 {
 .cookie-banner-text {
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+/* Ladebildschirm */
+#pageLoader {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--irm-green-dark);
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+#pageLoader img {
+  width: clamp(120px, 22vw, 180px);
+  height: auto;
+  animation: loaderPulse 1.3s ease-in-out infinite;
+}
+
+#pageLoader.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes loaderPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+/* Scroll-Einblendungen */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }

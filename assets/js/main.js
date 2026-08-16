@@ -980,4 +980,39 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast("Sie wurden abgemeldet.");
     });
   });
+
+  const pageLoader = document.getElementById("pageLoader");
+  if (pageLoader) {
+    const hideLoader = () => {
+      pageLoader.classList.add("hidden");
+      setTimeout(() => pageLoader.remove(), 600);
+    };
+    if (document.readyState === "complete") {
+      setTimeout(hideLoader, 350);
+    } else {
+      window.addEventListener("load", () => setTimeout(hideLoader, 350));
+      setTimeout(hideLoader, 3000);
+    }
+  }
+
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && "IntersectionObserver" in window) {
+    const revealTargets = document.querySelectorAll(
+      "main > section, main > h1, main > h2, main > .alert, main > .row > .col > .card, .hero-content, footer"
+    );
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+    );
+    revealTargets.forEach((el) => {
+      el.classList.add("reveal");
+      revealObserver.observe(el);
+    });
+  }
 });

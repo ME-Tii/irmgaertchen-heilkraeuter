@@ -57,6 +57,9 @@
   </script>
 </head>
 <body data-product-page>
+  <div id="pageLoader" aria-hidden="true">
+    <img src="/assets/img/logo-irmgaertchen_weiss.png" alt="Irmgärtchen Heilkräuter">
+  </div>
   <script type="application/json" id="product-data">{{ {"id": product.slug, "name": product.name, "category": product.category, "price": product.price_cents / 100, "desc": product.desc, "image": image, "stock": product.stock, "custom": product.custom == 1} | tojson }}</script>
   <div class="notice-strip text-center py-2">
     <i class="bi bi-shield-check"></i> Sichere Online-Bezahlung: Visa, Mastercard, EC-Karte, Apple Pay, Google Pay, PayPal &amp; SEPA – powered by Stripe.
