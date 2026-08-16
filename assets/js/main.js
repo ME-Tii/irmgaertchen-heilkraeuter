@@ -33,18 +33,29 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+function parseApiResponse(res) {
+  return res.text().then((text) => {
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        data = {};
+      }
+    }
+    if (!res.ok) throw new Error(data.error || "Anfrage fehlgeschlagen (HTTP " + res.status + ").");
+    return data;
+  });
+}
+
 function api(path, method, body) {
   const headers = { Accept: "application/json", "Content-Type": "application/json" };
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) headers.Authorization = "Bearer " + token;
   const opts = { method: method || "GET", headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  return fetch(path, opts).then((res) =>
-    res.json().then((data) => {
-      if (!res.ok) throw new Error(data.error || "Anfrage fehlgeschlagen.");
-      return data;
-    })
-  );
+  if (path && !path.startsWith("/")) path = "/" + path;
+  return fetch(path, opts).then(parseApiResponse);
 }
 
 function getProduct(id) {
@@ -367,7 +378,7 @@ function setSession(data) {
 function logout() {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) {
-    fetch("api/logout", {
+    fetch("/api/logout", {
       method: "POST",
       headers: { Authorization: "Bearer " + token },
     }).catch(() => {});

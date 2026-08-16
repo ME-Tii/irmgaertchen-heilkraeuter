@@ -29,10 +29,10 @@ function loadProducts() {
       /* fall back to API */
     }
   }
-  return fetch("api/products", { headers: { Accept: "application/json" } })
+  return fetch("/api/products", { headers: { Accept: "application/json" } })
     .then((r) => {
       if (!r.ok) throw new Error("Produkte konnten nicht geladen werden.");
-      return r.json();
+      return r.json().catch(() => []);
     })
     .then((data) => {
       const base = {};

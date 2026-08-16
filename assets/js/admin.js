@@ -39,12 +39,23 @@ function adminApi(path, method, body) {
   if (token) headers.Authorization = "Bearer " + token;
   const opts = { method: method || "GET", headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  return fetch(path, opts).then((res) =>
-    res.json().then((data) => {
-      if (!res.ok) throw new Error(data.error || "Anfrage fehlgeschlagen.");
-      return data;
-    })
-  );
+  if (path && !path.startsWith("/")) path = "/" + path;
+  return fetch(path, opts).then(parseApiResponse);
+}
+
+function parseApiResponse(res) {
+  return res.text().then((text) => {
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        data = {};
+      }
+    }
+    if (!res.ok) throw new Error(data.error || "Anfrage fehlgeschlagen (HTTP " + res.status + ").");
+    return data;
+  });
 }
 
 function adminUpload(path, file) {
@@ -53,12 +64,8 @@ function adminUpload(path, file) {
   const headers = { Accept: "application/json" };
   const token = localStorage.getItem(ADMIN_TOKEN_KEY);
   if (token) headers.Authorization = "Bearer " + token;
-  return fetch(path, { method: "POST", headers, body: fd }).then((res) =>
-    res.json().then((data) => {
-      if (!res.ok) throw new Error(data.error || "Upload fehlgeschlagen.");
-      return data;
-    })
-  );
+  if (path && !path.startsWith("/")) path = "/" + path;
+  return fetch(path, { method: "POST", headers, body: fd }).then(parseApiResponse);
 }
 
 function adminLoggedIn() {
@@ -68,7 +75,7 @@ function adminLoggedIn() {
 function adminLogout() {
   const token = localStorage.getItem(ADMIN_TOKEN_KEY);
   if (token) {
-    fetch("api/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(() => {});
+    fetch("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(() => {});
   }
   localStorage.removeItem(ADMIN_TOKEN_KEY);
 }
@@ -913,11 +920,11 @@ function createBackup() {
   const headers = { Accept: "application/zip" };
   const token = localStorage.getItem(ADMIN_TOKEN_KEY);
   if (token) headers.Authorization = "Bearer " + token;
-  fetch("api/admin/backup", { headers })
+  fetch("/api/admin/backup", { headers })
     .then((res) => {
       if (!res.ok) {
-        return res.json().then((d) => {
-          throw new Error(d.error || "Backup fehlgeschlagen.");
+        return parseApiResponse(res).then(() => {
+          throw new Error("Backup fehlgeschlagen (HTTP " + res.status + ").");
         });
       }
       const cd = res.headers.get("Content-Disposition") || "";

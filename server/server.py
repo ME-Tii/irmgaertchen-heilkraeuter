@@ -101,6 +101,20 @@ def err(msg, code):
     return jsonify({"error": msg}), code
 
 
+@app.errorhandler(404)
+def handle_404(e):
+    if request.path.startswith("/api/"):
+        return err("Ressource nicht gefunden.", 404)
+    return e
+
+
+@app.errorhandler(500)
+def handle_500(e):
+    if request.path.startswith("/api/"):
+        return err("Interner Serverfehler.", 500)
+    raise e
+
+
 @app.after_request
 def track_page_view(response):
     path = request.path
