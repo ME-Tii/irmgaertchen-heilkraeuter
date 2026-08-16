@@ -811,9 +811,12 @@ def import_all_tables(data):
                 )
         if USE_PG:
             for t in BACKUP_TABLES:
-                conn.execute(
-                    f"SELECT setval(pg_get_serial_sequence('{t}', 'id'), COALESCE(MAX(id), 1)) FROM {t}"
-                )
+                try:
+                    conn.execute(
+                        f"SELECT setval(pg_get_serial_sequence('{t}', 'id'), COALESCE(MAX(id), 1)) FROM {t}"
+                    )
+                except Exception:
+                    pass
         conn.commit()
     except Exception:
         conn.rollback()
