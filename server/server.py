@@ -7,6 +7,7 @@ import secrets
 import hmac
 import hashlib
 import re
+import base64
 import threading
 import zipfile
 from urllib.parse import quote, urlencode
@@ -1454,13 +1455,6 @@ def admin_delete_field_plan(plan_id):
     plan = db.get_field_plan(plan_id)
     if not plan:
         return err("Plan nicht gefunden.", 404)
-    if plan.get("image"):
-        img_path = os.path.join(IMG_DIR, plan["image"])
-        if os.path.isfile(img_path):
-            try:
-                os.remove(img_path)
-            except OSError:
-                pass
     db.delete_field_plan(plan_id)
     return jsonify({"ok": True})
 
@@ -1482,19 +1476,23 @@ def admin_upload_field_plan_image(plan_id):
     data = file.read(5 * 1024 * 1024 + 1)
     if len(data) > 5 * 1024 * 1024:
         return err("Bild zu groß (max. 5 MB).", 400)
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                ".webp": "image/webp", ".gif": "image/gif"}
+    mime = mime_map.get(ext, "image/jpeg")
+    b64 = base64.b64encode(data).decode("ascii")
     filename = f"fieldplan-{plan_id}{ext}"
-    os.makedirs(IMG_DIR, exist_ok=True)
-    if plan.get("image") and plan["image"] != filename:
-        old = os.path.join(IMG_DIR, plan["image"])
-        if os.path.isfile(old):
-            try:
-                os.remove(old)
-            except OSError:
-                pass
-    with open(os.path.join(IMG_DIR, filename), "wb") as out:
-        out.write(data)
-    db.update_field_plan(plan_id, {"image": filename})
+    db.update_field_plan(plan_id, {"image": filename, "image_data": b64, "image_mime": mime})
     return jsonify({"ok": True, "image": filename})
+
+
+@app.get("/api/field-plans/<int:plan_id>/image")
+def serve_field_plan_image(plan_id):
+    plan = db.get_field_plan(plan_id)
+    if not plan or not plan.get("image_data"):
+        return err("Bild nicht gefunden.", 404)
+    mime = plan.get("image_mime") or "image/jpeg"
+    raw = base64.b64decode(plan["image_data"])
+    return Response(raw, mimetype=mime, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.post("/api/admin/field-plans/<int:plan_id>/calibrate")

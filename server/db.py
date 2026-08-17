@@ -379,6 +379,16 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE field_plans ADD COLUMN image_data TEXT NOT NULL DEFAULT ''"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE field_plans ADD COLUMN image_mime TEXT NOT NULL DEFAULT ''"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
     for col in ("coupon_code", "discount_cents"):
         try:
             conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''" if col == "coupon_code" else f"ALTER TABLE orders ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"))

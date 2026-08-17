@@ -1393,7 +1393,7 @@ function loadFieldImage() {
     if (canvas) canvas.classList.add("d-none");
     if (noImg) noImg.classList.remove("d-none");
   };
-  img.src = "assets/img/" + fpState.plan.image + "?t=" + Date.now();
+  img.src = "/api/field-plans/" + fpState.plan.id + "/image?t=" + Date.now();
 }
 
 function setupCanvas() {
