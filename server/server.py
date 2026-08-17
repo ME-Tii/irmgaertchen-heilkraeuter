@@ -1381,6 +1381,206 @@ def admin_stats():
     return jsonify(db.get_view_stats())
 
 
+# ---------------------------------------------------------------- field plans / crop planner
+
+FIELD_IMG_ALLOW = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+
+@app.get("/api/admin/field-plans")
+def admin_list_field_plans():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plans = db.list_field_plans()
+    out = []
+    for p in plans:
+        sections = db.list_field_sections(p["id"])
+        out.append({**p, "section_count": len(sections)})
+    return jsonify({"plans": out})
+
+
+@app.post("/api/admin/field-plans")
+def admin_create_field_plan():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    name = _clean_text(data.get("name"), 200)
+    if not name:
+        return err("Bitte einen Namen angeben.", 400)
+    plan_id = db.create_field_plan(name)
+    return jsonify({"ok": True, "id": plan_id})
+
+
+@app.get("/api/admin/field-plans/<int:plan_id>")
+def admin_get_field_plan(plan_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plan = db.get_field_plan(plan_id)
+    if not plan:
+        return err("Plan nicht gefunden.", 404)
+    sections = db.list_field_sections(plan_id)
+    for s in sections:
+        s["points"] = json.loads(s.get("points_json") or "[]")
+    return jsonify({"plan": plan, "sections": sections})
+
+
+@app.put("/api/admin/field-plans/<int:plan_id>")
+def admin_update_field_plan(plan_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plan = db.get_field_plan(plan_id)
+    if not plan:
+        return err("Plan nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    if "name" in data:
+        fields["name"] = _clean_text(data["name"], 200) or plan["name"]
+    if "width_meters" in data:
+        fields["width_meters"] = data["width_meters"]
+    if "height_meters" in data:
+        fields["height_meters"] = data["height_meters"]
+    db.update_field_plan(plan_id, fields)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/field-plans/<int:plan_id>")
+def admin_delete_field_plan(plan_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plan = db.get_field_plan(plan_id)
+    if not plan:
+        return err("Plan nicht gefunden.", 404)
+    if plan.get("image"):
+        img_path = os.path.join(IMG_DIR, plan["image"])
+        if os.path.isfile(img_path):
+            try:
+                os.remove(img_path)
+            except OSError:
+                pass
+    db.delete_field_plan(plan_id)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/field-plans/<int:plan_id>/image")
+def admin_upload_field_plan_image(plan_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plan = db.get_field_plan(plan_id)
+    if not plan:
+        return err("Plan nicht gefunden.", 404)
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return err("Keine Datei angehängt.", 400)
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in FIELD_IMG_ALLOW:
+        return err("Nur JPG, PNG, WebP oder GIF erlaubt.", 400)
+    data = file.read(5 * 1024 * 1024 + 1)
+    if len(data) > 5 * 1024 * 1024:
+        return err("Bild zu groß (max. 5 MB).", 400)
+    filename = f"fieldplan-{plan_id}{ext}"
+    os.makedirs(IMG_DIR, exist_ok=True)
+    if plan.get("image") and plan["image"] != filename:
+        old = os.path.join(IMG_DIR, plan["image"])
+        if os.path.isfile(old):
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+    with open(os.path.join(IMG_DIR, filename), "wb") as out:
+        out.write(data)
+    db.update_field_plan(plan_id, {"image": filename})
+    return jsonify({"ok": True, "image": filename})
+
+
+@app.post("/api/admin/field-plans/<int:plan_id>/calibrate")
+def admin_calibrate_field_plan(plan_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plan = db.get_field_plan(plan_id)
+    if not plan:
+        return err("Plan nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    if "width_meters" in data and "height_meters" in data:
+        fields["width_meters"] = float(data["width_meters"])
+        fields["height_meters"] = float(data["height_meters"])
+        fields["calibration_x1"] = None
+        fields["calibration_y1"] = None
+        fields["calibration_x2"] = None
+        fields["calibration_y2"] = None
+        fields["calibration_meters"] = None
+    elif all(k in data for k in ("x1", "y1", "x2", "y2", "meters")):
+        fields["calibration_x1"] = float(data["x1"])
+        fields["calibration_y1"] = float(data["y1"])
+        fields["calibration_x2"] = float(data["x2"])
+        fields["calibration_y2"] = float(data["y2"])
+        fields["calibration_meters"] = float(data["meters"])
+        fields["width_meters"] = None
+        fields["height_meters"] = None
+    else:
+        return err("Ungültige Kalibrierungsdaten.", 400)
+    db.update_field_plan(plan_id, fields)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/field-plans/<int:plan_id>/sections")
+def admin_create_field_section(plan_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    plan = db.get_field_plan(plan_id)
+    if not plan:
+        return err("Plan nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    points = data.get("points", [])
+    if not isinstance(points, list) or len(points) < 3:
+        return err("Ein Bereich muss mindestens 3 Punkte haben.", 400)
+    data["points_json"] = json.dumps(points, ensure_ascii=False)
+    GROWTH_STAGES = ["Saaten", "Keimlinge", "Wachstum", "Reif", "Geerntet"]
+    if data.get("growth_stage") and data["growth_stage"] not in GROWTH_STAGES:
+        data["growth_stage"] = "Saaten"
+    section_id = db.create_field_section(plan_id, data)
+    return jsonify({"ok": True, "id": section_id})
+
+
+@app.put("/api/admin/field-plans/<int:plan_id>/sections/<int:section_id>")
+def admin_update_field_section(plan_id, section_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    section = db.get_field_section(section_id)
+    if not section or section["plan_id"] != plan_id:
+        return err("Bereich nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    for key in ("name", "plant_name", "plant_variety", "planting_date",
+                "growth_stage", "expected_harvest", "notes", "watering_schedule", "color"):
+        if key in data:
+            fields[key] = data[key] if key != "growth_stage" else (_clean_text(data[key], 50) or "Saaten")
+    if "points" in data:
+        fields["points_json"] = json.dumps(data["points"], ensure_ascii=False)
+    db.update_field_section(section_id, fields)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/field-plans/<int:plan_id>/sections/<int:section_id>")
+def admin_delete_field_section(plan_id, section_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    section = db.get_field_section(section_id)
+    if not section or section["plan_id"] != plan_id:
+        return err("Bereich nicht gefunden.", 404)
+    db.delete_field_section(section_id)
+    return jsonify({"ok": True})
+
+
 # ---------------------------------------------------------------- backup
 
 @app.get("/api/admin/backup")

@@ -114,18 +114,21 @@ function switchTab(tab) {
   const inventory = document.getElementById("inventory");
   const messagesPanel = document.getElementById("messagesPanel");
   const statsPanel = document.getElementById("statsPanel");
+  const fieldplanPanel = document.getElementById("fieldplanPanel");
   const backupPanel = document.getElementById("backupPanel");
   const couponsPanel = document.getElementById("couponsPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
   if (statsPanel) statsPanel.classList.toggle("d-none", tab !== "stats");
+  if (fieldplanPanel) fieldplanPanel.classList.toggle("d-none", tab !== "fieldplan");
   if (backupPanel) backupPanel.classList.toggle("d-none", tab !== "backup");
   if (couponsPanel) couponsPanel.classList.toggle("d-none", tab !== "coupons");
   try {
     if (tab === "inventory") renderInventory();
     if (tab === "messages") renderMessages();
     if (tab === "stats") loadStats();
+    if (tab === "fieldplan") loadFieldPlans();
     if (tab === "coupons") renderCoupons();
   } catch (e) {
     console.error("Tab-Fehler:", e);
@@ -1181,4 +1184,670 @@ function initCouponForm() {
         .catch((err) => showMsg("couponsMsg", err.message, "danger"));
     });
   }
+}
+
+// ---------------------------------------------------------------- field plans / crop planner
+
+const FIELD_COLORS = [
+  "#3f6b3b", "#c9a227", "#176f8e", "#b04a5a",
+  "#6a5acd", "#e07020", "#2e8b57", "#cd5c5c",
+  "#4682b4", "#9b59b6",
+];
+const GROWTH_STAGES = ["Saaten", "Keimlinge", "Wachstum", "Reif", "Geerntet"];
+const GROWTH_COLORS = {
+  "Saaten": "#8B4513",
+  "Keimlinge": "#90EE90",
+  "Wachstum": "#3f6b3b",
+  "Reif": "#c9a227",
+  "Geerntet": "#6c757d",
+};
+
+let fpState = {
+  plan: null,
+  sections: [],
+  drawing: false,
+  drawPoints: [],
+  calibrating: false,
+  calibPoints: [],
+  selectedSection: null,
+  image: null,
+  colorIdx: 0,
+};
+
+function loadFieldPlans() {
+  return adminApi("api/admin/field-plans")
+    .then((data) => {
+      window.FIELD_PLANS = data.plans || [];
+      renderFieldPlanList();
+    })
+    .catch((err) => {
+      showMsg("fieldplanMsg", err.message || "Pläne konnten nicht geladen werden.", "danger");
+    });
+}
+
+function renderFieldPlanList() {
+  const cards = document.getElementById("fieldplanCards");
+  const empty = document.getElementById("fieldplanEmpty");
+  const plans = window.FIELD_PLANS || [];
+  if (!cards) return;
+  if (plans.length === 0) {
+    if (empty) empty.classList.remove("d-none");
+    cards.innerHTML = "";
+    return;
+  }
+  if (empty) empty.classList.add("d-none");
+  cards.innerHTML = plans.map((p) => {
+    const img = p.image ? "assets/img/" + esc(p.image) : "";
+    return (
+      '<div class="col-md-6 col-lg-4">' +
+      '<div class="card h-100">' +
+      (img
+        ? '<img src="' + img + '" class="card-img-top" style="height:160px;object-fit:cover;" alt="' + esc(p.name) + '">'
+        : '<div class="card-img-top d-flex align-items-center justify-content-center bg-light" style="height:160px;"><i class="bi bi-image display-4 text-muted"></i></div>') +
+      '<div class="card-body">' +
+      '<h5 class="card-title">' + esc(p.name) + '</h5>' +
+      '<p class="card-text text-muted small mb-2">' + (p.section_count || 0) + ' Bereiche' +
+      (p.width_meters && p.height_meters ? ' · ' + p.width_meters + ' m × ' + p.height_meters + ' m' : '') +
+      '</p>' +
+      '</div>' +
+      '<div class="card-footer d-flex gap-2">' +
+      '<button class="btn btn-sm btn-irm fieldplan-edit" data-id="' + p.id + '"><i class="bi bi-pencil"></i> Bearbeiten</button> ' +
+      '<button class="btn btn-sm btn-outline-danger fieldplan-delete" data-id="' + p.id + '" data-name="' + esc(p.name) + '"><i class="bi bi-trash"></i></button>' +
+      '</div>' +
+      '</div></div>'
+    );
+  }).join("");
+  cards.querySelectorAll(".fieldplan-edit").forEach((btn) => {
+    btn.addEventListener("click", () => openFieldPlanEditor(parseInt(btn.dataset.id)));
+  });
+  cards.querySelectorAll(".fieldplan-delete").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (confirm('Plan "' + btn.dataset.name + '" wirklich löschen?')) {
+        adminApi("api/admin/field-plans/" + btn.dataset.id, "DELETE")
+          .then(() => { showMsg("fieldplanMsg", "Plan gelöscht.", "success"); loadFieldPlans(); })
+          .catch((err) => showMsg("fieldplanMsg", err.message, "danger"));
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const fpCreateBtn = document.getElementById("fieldplanCreateBtn");
+  if (fpCreateBtn) {
+    fpCreateBtn.addEventListener("click", () => {
+      const name = prompt("Name des Anbauplans:");
+      if (!name || !name.trim()) return;
+      adminApi("api/admin/field-plans", "POST", { name: name.trim() })
+        .then((data) => {
+          showMsg("fieldplanMsg", "Plan angelegt.", "success");
+          openFieldPlanEditor(data.id);
+        })
+        .catch((err) => showMsg("fieldplanMsg", err.message, "danger"));
+    });
+  }
+  const fpBackBtn = document.getElementById("fieldplanBackBtn");
+  if (fpBackBtn) {
+    fpBackBtn.addEventListener("click", () => {
+      closeFieldEditor();
+      loadFieldPlans();
+    });
+  }
+  const fpImageBtn = document.getElementById("fieldplanImageBtn");
+  const fpImageInput = document.getElementById("fieldplanImageInput");
+  if (fpImageBtn && fpImageInput) {
+    fpImageBtn.addEventListener("click", () => fpImageInput.click());
+    fpImageInput.addEventListener("change", () => {
+      const file = fpImageInput.files && fpImageInput.files[0];
+      if (!file || !fpState.plan) return;
+      adminUpload("api/admin/field-plans/" + fpState.plan.id + "/image", file)
+        .then(() => { showToast("Grundriss hochgeladen."); return reloadFieldPlan(); })
+        .catch((err) => showToast(err.message));
+    });
+  }
+  const fpCalibrateBtn = document.getElementById("fieldplanCalibrateBtn");
+  if (fpCalibrateBtn) {
+    fpCalibrateBtn.addEventListener("click", () => startCalibration());
+  }
+  const fpDrawBtn = document.getElementById("fieldplanDrawBtn");
+  if (fpDrawBtn) {
+    fpDrawBtn.addEventListener("click", () => {
+      if (fpState.drawing) {
+        cancelDrawing();
+      } else {
+        startDrawing();
+      }
+    });
+  }
+});
+
+function openFieldPlanEditor(planId) {
+  adminApi("api/admin/field-plans/" + planId)
+    .then((data) => {
+      fpState.plan = data.plan;
+      fpState.sections = data.sections || [];
+      fpState.drawing = false;
+      fpState.drawPoints = [];
+      fpState.calibrating = false;
+      fpState.calibPoints = [];
+      fpState.selectedSection = null;
+      fpState.image = null;
+      fpState.colorIdx = 0;
+      document.getElementById("fieldplanList").classList.add("d-none");
+      document.getElementById("fieldplanEditor").classList.remove("d-none");
+      document.getElementById("fieldplanEditorTitle").textContent = data.plan.name;
+      showSectionPanel(null);
+      renderScalePanel();
+      loadFieldImage();
+    })
+    .catch((err) => showToast(err.message));
+}
+
+function closeFieldEditor() {
+  fpState.plan = null;
+  fpState.sections = [];
+  fpState.image = null;
+  fpState.drawing = false;
+  fpState.calibrating = false;
+  fpState.selectedSection = null;
+  document.getElementById("fieldplanEditor").classList.add("d-none");
+  document.getElementById("fieldplanList").classList.remove("d-none");
+  const canvas = document.getElementById("fieldCanvas");
+  if (canvas) canvas.classList.add("d-none");
+  const noImg = document.getElementById("fieldplanNoImage");
+  if (noImg) noImg.classList.remove("d-none");
+  const drawBtn = document.getElementById("fieldplanDrawBtn");
+  if (drawBtn) {
+    drawBtn.innerHTML = '<i class="bi bi-pencil-square"></i> Bereich zeichnen';
+    drawBtn.classList.remove("active");
+  }
+}
+
+function reloadFieldPlan() {
+  if (!fpState.plan) return;
+  return adminApi("api/admin/field-plans/" + fpState.plan.id)
+    .then((data) => {
+      fpState.plan = data.plan;
+      fpState.sections = data.sections || [];
+      loadFieldImage();
+    });
+}
+
+function loadFieldImage() {
+  const canvas = document.getElementById("fieldCanvas");
+  const noImg = document.getElementById("fieldplanNoImage");
+  if (!fpState.plan || !fpState.plan.image) {
+    if (canvas) canvas.classList.add("d-none");
+    if (noImg) noImg.classList.remove("d-none");
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    fpState.image = img;
+    if (noImg) noImg.classList.add("d-none");
+    if (canvas) canvas.classList.remove("d-none");
+    setupCanvas();
+    renderFieldCanvas();
+  };
+  img.onerror = () => {
+    if (canvas) canvas.classList.add("d-none");
+    if (noImg) noImg.classList.remove("d-none");
+  };
+  img.src = "assets/img/" + fpState.plan.image;
+}
+
+function setupCanvas() {
+  const container = document.getElementById("fieldCanvasContainer");
+  const canvas = document.getElementById("fieldCanvas");
+  if (!container || !canvas || !fpState.image) return;
+  const maxW = container.clientWidth || 800;
+  const ratio = fpState.image.height / fpState.image.width;
+  let w = maxW;
+  let h = Math.round(w * ratio);
+  if (h > 600) { h = 600; w = Math.round(h / ratio); }
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  canvas.onclick = onCanvasClick;
+  canvas.ondblclick = onCanvasDblClick;
+  canvas.onmousemove = onCanvasMouseMove;
+  canvas.style.cursor = fpState.drawing ? "crosshair" : "default";
+}
+
+function renderFieldCanvas() {
+  const canvas = document.getElementById("fieldCanvas");
+  if (!canvas || !fpState.image) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(fpState.image, 0, 0, w, h);
+
+  fpState.sections.forEach((s) => {
+    const pts = s.points || [];
+    if (pts.length < 3) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x * w, pts[0].y * h);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x * w, pts[i].y * h);
+    ctx.closePath();
+    ctx.fillStyle = hexToRGBA(s.color || "#3f6b3b", 0.3);
+    ctx.fill();
+    ctx.strokeStyle = s.color || "#3f6b3b";
+    ctx.lineWidth = fpState.selectedSection === s.id ? 3 : 2;
+    ctx.stroke();
+
+    if (pts.length >= 3) {
+      const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length * w;
+      const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length * h;
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 13px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = s.plant_name || s.name || "";
+      if (label) {
+        const tw = ctx.measureText(label).width + 10;
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(cx - tw / 2, cy - 10, tw, 20);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(label, cx, cy);
+      }
+    }
+  });
+
+  if (fpState.drawPoints.length > 0) {
+    ctx.beginPath();
+    ctx.moveTo(fpState.drawPoints[0].x * w, fpState.drawPoints[0].y * h);
+    for (let i = 1; i < fpState.drawPoints.length; i++) {
+      ctx.lineTo(fpState.drawPoints[i].x * w, fpState.drawPoints[i].y * h);
+    }
+    ctx.strokeStyle = "#ff4444";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    fpState.drawPoints.forEach((p) => {
+      ctx.beginPath();
+      ctx.arc(p.x * w, p.y * h, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ff4444";
+      ctx.fill();
+    });
+  }
+
+  drawDimensions(ctx, w, h);
+}
+
+function drawDimensions(ctx, w, h) {
+  fpState.sections.forEach((s) => {
+    const pts = s.points || [];
+    if (pts.length < 2) return;
+    const ppm = getPixelsPerMeter();
+    if (!ppm) return;
+    for (let i = 0; i < pts.length; i++) {
+      const j = (i + 1) % pts.length;
+      const x1 = pts[i].x * w, y1 = pts[i].y * h;
+      const x2 = pts[j].x * w, y2 = pts[j].y * h;
+      const pxLen = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+      const mLen = pxLen / ppm;
+      if (mLen < 0.3) continue;
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      ctx.save();
+      ctx.translate(mx, my);
+      let rot = angle;
+      if (rot > Math.PI / 2) rot -= Math.PI;
+      if (rot < -Math.PI / 2) rot += Math.PI;
+      ctx.rotate(rot);
+      const text = mLen.toFixed(2) + " m";
+      ctx.font = "bold 11px Inter, sans-serif";
+      const tw = ctx.measureText(text).width + 6;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillRect(-tw / 2, -9, tw, 18);
+      ctx.fillStyle = "#2b2b2b";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+  });
+}
+
+function getPixelsPerMeter() {
+  const canvas = document.getElementById("fieldCanvas");
+  if (!canvas || !fpState.plan) return null;
+  const p = fpState.plan;
+  if (p.width_meters && p.height_meters && p.width_meters > 0 && p.height_meters > 0) {
+    return canvas.width / p.width_meters;
+  }
+  if (p.calibration_x1 != null && p.calibration_x2 != null && p.calibration_meters && p.calibration_meters > 0) {
+    const dx = (p.calibration_x2 - p.calibration_x1) * canvas.width;
+    const dy = (p.calibration_y2 - p.calibration_y1) * canvas.height;
+    const pxLen = Math.sqrt(dx * dx + dy * dy);
+    return pxLen / p.calibration_meters;
+  }
+  return null;
+}
+
+function hexToRGBA(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+}
+
+// ---- drawing
+
+function startDrawing() {
+  fpState.drawing = true;
+  fpState.drawPoints = [];
+  fpState.calibrating = false;
+  fpState.calibPoints = [];
+  fpState.selectedSection = null;
+  showSectionPanel(null);
+  const canvas = document.getElementById("fieldCanvas");
+  if (canvas) canvas.style.cursor = "crosshair";
+  const drawBtn = document.getElementById("fieldplanDrawBtn");
+  if (drawBtn) {
+    drawBtn.innerHTML = '<i class="bi bi-x-lg"></i> Abbrechen';
+    drawBtn.classList.add("active");
+  }
+  renderFieldCanvas();
+}
+
+function cancelDrawing() {
+  fpState.drawing = false;
+  fpState.drawPoints = [];
+  const canvas = document.getElementById("fieldCanvas");
+  if (canvas) canvas.style.cursor = "default";
+  const drawBtn = document.getElementById("fieldplanDrawBtn");
+  if (drawBtn) {
+    drawBtn.innerHTML = '<i class="bi bi-pencil-square"></i> Bereich zeichnen';
+    drawBtn.classList.remove("active");
+  }
+  renderFieldCanvas();
+}
+
+function onCanvasClick(e) {
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / canvas.width;
+  const y = (e.clientY - rect.top) / canvas.height;
+
+  if (fpState.calibrating) {
+    fpState.calibPoints.push({ x, y });
+    if (fpState.calibPoints.length === 2) {
+      finishCalibration();
+    }
+    renderFieldCanvas();
+    drawCalibLine();
+    return;
+  }
+
+  if (fpState.drawing) {
+    fpState.drawPoints.push({ x, y });
+    renderFieldCanvas();
+    return;
+  }
+
+  let hit = null;
+  for (let i = fpState.sections.length - 1; i >= 0; i--) {
+    if (pointInPolygon({ x, y }, fpState.sections[i].points || [])) {
+      hit = fpState.sections[i];
+      break;
+    }
+  }
+  fpState.selectedSection = hit ? hit.id : null;
+  showSectionPanel(hit);
+  renderFieldCanvas();
+}
+
+function onCanvasDblClick(e) {
+  if (!fpState.drawing || fpState.drawPoints.length < 3) return;
+  e.preventDefault();
+  const points = fpState.drawPoints.slice();
+  cancelDrawing();
+  const color = FIELD_COLORS[fpState.colorIdx % FIELD_COLORS.length];
+  fpState.colorIdx++;
+  const payload = {
+    name: "",
+    points: points,
+    color: color,
+    growth_stage: "Saaten",
+  };
+  adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections", "POST", payload)
+    .then((data) => {
+      showToast("Bereich angelegt.");
+      return reloadFieldPlan();
+    })
+    .then(() => {
+      const newSec = fpState.sections.find((s) => s.points_json === JSON.stringify(points));
+      if (newSec) {
+        fpState.selectedSection = newSec.id;
+        showSectionPanel(newSec);
+        renderFieldCanvas();
+      }
+    })
+    .catch((err) => showToast(err.message));
+}
+
+function onCanvasMouseMove(e) {
+  if (!fpState.drawing) return;
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / canvas.width;
+  const my = (e.clientY - rect.top) / canvas.height;
+  renderFieldCanvas();
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  if (fpState.drawPoints.length > 0) {
+    const last = fpState.drawPoints[fpState.drawPoints.length - 1];
+    ctx.beginPath();
+    ctx.moveTo(last.x * w, last.y * h);
+    ctx.lineTo(mx * w, my * h);
+    ctx.strokeStyle = "rgba(255,68,68,0.5)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function pointInPolygon(pt, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y;
+    const xj = polygon[j].x, yj = polygon[j].y;
+    if (((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// ---- calibration
+
+function startCalibration() {
+  if (!fpState.image) { showToast("Bitte zuerst einen Grundriss hochladen."); return; }
+  fpState.calibrating = true;
+  fpState.calibPoints = [];
+  fpState.drawing = false;
+  fpState.drawPoints = [];
+  const canvas = document.getElementById("fieldCanvas");
+  if (canvas) canvas.style.cursor = "crosshair";
+  showToast("Zwei Punkte auf dem Bild klicken und dann den Abstand eingeben.");
+  renderFieldCanvas();
+}
+
+function drawCalibLine() {
+  const canvas = document.getElementById("fieldCanvas");
+  if (!canvas || fpState.calibPoints.length === 0) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  fpState.calibPoints.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x * w, p.y * h, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff8800";
+    ctx.fill();
+  });
+  if (fpState.calibPoints.length === 2) {
+    const [a, b] = fpState.calibPoints;
+    ctx.beginPath();
+    ctx.moveTo(a.x * w, a.y * h);
+    ctx.lineTo(b.x * w, b.y * h);
+    ctx.strokeStyle = "#ff8800";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function finishCalibration() {
+  fpState.calibrating = false;
+  const canvas = document.getElementById("fieldCanvas");
+  if (canvas) canvas.style.cursor = "default";
+  const meters = prompt("Wie lang ist die Strecke zwischen den beiden Punkten (in Metern)?");
+  if (!meters || isNaN(parseFloat(meters)) || parseFloat(meters) <= 0) {
+    fpState.calibPoints = [];
+    renderFieldCanvas();
+    return;
+  }
+  const [a, b] = fpState.calibPoints;
+  adminApi("api/admin/field-plans/" + fpState.plan.id + "/calibrate", "POST", {
+    x1: a.x, y1: a.y, x2: b.x, y2: b.y, meters: parseFloat(meters),
+  })
+    .then(() => { showToast("Kalibrierung gespeichert."); return reloadFieldPlan(); })
+    .catch((err) => showToast(err.message));
+  fpState.calibPoints = [];
+  renderFieldCanvas();
+}
+
+function renderScalePanel() {
+  const body = document.getElementById("fieldScaleBody");
+  if (!body || !fpState.plan) return;
+  const p = fpState.plan;
+  const hasManual = p.width_meters && p.height_meters;
+  const hasCalib = p.calibration_x1 != null && p.calibration_meters;
+  let html = "";
+  if (hasManual) {
+    html += '<p class="small mb-2"><strong>Manuell:</strong> ' + p.width_meters + ' m × ' + p.height_meters + ' m</p>';
+  } else if (hasCalib) {
+    html += '<p class="small mb-2"><strong>Kalibriert:</strong> ' + p.calibration_meters + ' m Referenzlinie</p>';
+  }
+  html += '<hr class="my-2">';
+  html += '<p class="small text-muted mb-2">Manuelle Skalierung:</p>';
+  html += '<div class="row g-2 mb-2">';
+  html += '<div class="col-6"><input type="number" min="0.1" step="0.1" class="form-control form-control-sm" id="fpScaleW" placeholder="Breite (m)" value="' + (hasManual ? p.width_meters : '') + '"></div>';
+  html += '<div class="col-6"><input type="number" min="0.1" step="0.1" class="form-control form-control-sm" id="fpScaleH" placeholder="Höhe (m)" value="' + (hasManual ? p.height_meters : '') + '"></div>';
+  html += '</div>';
+  html += '<button class="btn btn-sm btn-outline-irm w-100 mb-2" id="fpScaleApply">Anwenden</button>';
+  if (hasManual || hasCalib) {
+    html += '<button class="btn btn-sm btn-outline-danger w-100" id="fpScaleClear">Kalibrierung entfernen</button>';
+  }
+  body.innerHTML = html;
+  const applyBtn = document.getElementById("fpScaleApply");
+  if (applyBtn) {
+    applyBtn.addEventListener("click", () => {
+      const w = parseFloat(document.getElementById("fpScaleW").value);
+      const h = parseFloat(document.getElementById("fpScaleH").value);
+      if (!w || !h || w <= 0 || h <= 0) { showToast("Bitte Breite und Höhe > 0 eingeben."); return; }
+      adminApi("api/admin/field-plans/" + fpState.plan.id + "/calibrate", "POST", { width_meters: w, height_meters: h })
+        .then(() => { showToast("Skalierung gespeichert."); return reloadFieldPlan(); })
+        .then(renderScalePanel)
+        .catch((err) => showToast(err.message));
+    });
+  }
+  const clearBtn = document.getElementById("fpScaleClear");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      adminApi("api/admin/field-plans/" + fpState.plan.id + "/calibrate", "POST", { width_meters: null, height_meters: null })
+        .then(() => { showToast("Kalibrierung entfernt."); return reloadFieldPlan(); })
+        .then(renderScalePanel)
+        .catch((err) => showToast(err.message));
+    });
+  }
+}
+
+// ---- section properties panel
+
+function showSectionPanel(section) {
+  const body = document.getElementById("fieldSectionBody");
+  if (!body) return;
+  if (!section) {
+    body.innerHTML = '<p class="text-muted small mb-0">Zeichnen Sie einen Bereich auf dem Grundriss, oder klicken Sie auf einen bestehenden Bereich.</p>';
+    return;
+  }
+  const growthOptions = GROWTH_STAGES.map(
+    (g) => '<option value="' + g + '"' + (g === section.growth_stage ? " selected" : "") + '>' + g + '</option>'
+  ).join("");
+  body.innerHTML =
+    '<div class="mb-2">' +
+    '<label class="form-label small">Name</label>' +
+    '<input type="text" class="form-control form-control-sm" id="fsName" value="' + esc(section.name || '') + '">' +
+    '</div>' +
+    '<div class="mb-2">' +
+    '<label class="form-label small">Pflanze</label>' +
+    '<input type="text" class="form-control form-control-sm" id="fsPlant" value="' + esc(section.plant_name || '') + '" placeholder="z.B. Salbei">' +
+    '</div>' +
+    '<div class="mb-2">' +
+    '<label class="form-label small">Sorte</label>' +
+    '<input type="text" class="form-control form-control-sm" id="fsVariety" value="' + esc(section.plant_variety || '') + '" placeholder="z.B. Bergsalbei">' +
+    '</div>' +
+    '<div class="row g-2 mb-2">' +
+    '<div class="col-6">' +
+    '<label class="form-label small">Pflanzdatum</label>' +
+    '<input type="date" class="form-control form-control-sm" id="fsPlantDate" value="' + (section.planting_date || '') + '">' +
+    '</div>' +
+    '<div class="col-6">' +
+    '<label class="form-label small">Ernte erwartet</label>' +
+    '<input type="date" class="form-control form-control-sm" id="fsHarvest" value="' + (section.expected_harvest || '') + '">' +
+    '</div>' +
+    '</div>' +
+    '<div class="mb-2">' +
+    '<label class="form-label small">Wachstumsphase</label>' +
+    '<select class="form-select form-select-sm" id="fsStage">' + growthOptions + '</select>' +
+    '</div>' +
+    '<div class="mb-2">' +
+    '<label class="form-label small">Bewässerung</label>' +
+    '<input type="text" class="form-control form-control-sm" id="fsWater" value="' + esc(section.watering_schedule || '') + '" placeholder="z.B. Jeden 2. Tag">' +
+    '</div>' +
+    '<div class="mb-2">' +
+    '<label class="form-label small">Notizen</label>' +
+    '<textarea class="form-control form-control-sm" id="fsNotes" rows="2">' + esc(section.notes || '') + '</textarea>' +
+    '</div>' +
+    '<div class="mb-2">' +
+    '<label class="form-label small">Farbe</label>' +
+    '<input type="color" class="form-control form-control-sm form-control-color" id="fsColor" value="' + (section.color || '#3f6b3b') + '">' +
+    '</div>' +
+    '<div class="d-flex gap-2">' +
+    '<button class="btn btn-sm btn-irm flex-grow-1" id="fsSave"><i class="bi bi-check-lg"></i> Speichern</button>' +
+    '<button class="btn btn-sm btn-outline-danger" id="fsDelete" title="Löschen"><i class="bi bi-trash"></i></button>' +
+    '</div>';
+  document.getElementById("fsSave").addEventListener("click", () => saveSection(section.id));
+  document.getElementById("fsDelete").addEventListener("click", () => {
+    if (!confirm("Bereich wirklich löschen?")) return;
+    adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + section.id, "DELETE")
+      .then(() => { showToast("Bereich gelöscht."); fpState.selectedSection = null; showSectionPanel(null); return reloadFieldPlan(); })
+      .catch((err) => showToast(err.message));
+  });
+}
+
+function saveSection(sectionId) {
+  const data = {
+    name: document.getElementById("fsName").value.trim(),
+    plant_name: document.getElementById("fsPlant").value.trim(),
+    plant_variety: document.getElementById("fsVariety").value.trim(),
+    planting_date: document.getElementById("fsPlantDate").value || null,
+    expected_harvest: document.getElementById("fsHarvest").value || null,
+    growth_stage: document.getElementById("fsStage").value,
+    watering_schedule: document.getElementById("fsWater").value.trim(),
+    notes: document.getElementById("fsNotes").value.trim(),
+    color: document.getElementById("fsColor").value,
+  };
+  adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + sectionId, "PUT", data)
+    .then(() => { showToast("Bereich gespeichert."); return reloadFieldPlan(); })
+    .then(() => renderFieldCanvas())
+    .catch((err) => showToast(err.message));
 }

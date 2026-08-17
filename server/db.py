@@ -154,6 +154,35 @@ SQLITE_SCHEMA = [
         valid_until TEXT,
         active INTEGER NOT NULL DEFAULT 1
     );""",
+    """CREATE TABLE IF NOT EXISTS field_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        image TEXT NOT NULL DEFAULT '',
+        width_meters REAL,
+        height_meters REAL,
+        calibration_x1 REAL,
+        calibration_y1 REAL,
+        calibration_x2 REAL,
+        calibration_y2 REAL,
+        calibration_meters REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
+    """CREATE TABLE IF NOT EXISTS field_sections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_id INTEGER NOT NULL REFERENCES field_plans(id) ON DELETE CASCADE,
+        name TEXT NOT NULL DEFAULT '',
+        plant_name TEXT NOT NULL DEFAULT '',
+        plant_variety TEXT NOT NULL DEFAULT '',
+        planting_date TEXT,
+        growth_stage TEXT NOT NULL DEFAULT 'Saat',
+        expected_harvest TEXT,
+        notes TEXT NOT NULL DEFAULT '',
+        watering_schedule TEXT NOT NULL DEFAULT '',
+        points_json TEXT NOT NULL DEFAULT '[]',
+        color TEXT NOT NULL DEFAULT '#3f6b3b',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -268,6 +297,35 @@ PG_SCHEMA = [
         valid_from TEXT NOT NULL,
         valid_until TEXT,
         active INTEGER NOT NULL DEFAULT 1
+    );""",
+    """CREATE TABLE IF NOT EXISTS field_plans (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        image TEXT NOT NULL DEFAULT '',
+        width_meters REAL,
+        height_meters REAL,
+        calibration_x1 REAL,
+        calibration_y1 REAL,
+        calibration_x2 REAL,
+        calibration_y2 REAL,
+        calibration_meters REAL,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
+    """CREATE TABLE IF NOT EXISTS field_sections (
+        id SERIAL PRIMARY KEY,
+        plan_id INTEGER NOT NULL REFERENCES field_plans(id) ON DELETE CASCADE,
+        name TEXT NOT NULL DEFAULT '',
+        plant_name TEXT NOT NULL DEFAULT '',
+        plant_variety TEXT NOT NULL DEFAULT '',
+        planting_date TEXT,
+        growth_stage TEXT NOT NULL DEFAULT 'Saat',
+        expected_harvest TEXT,
+        notes TEXT NOT NULL DEFAULT '',
+        watering_schedule TEXT NOT NULL DEFAULT '',
+        points_json TEXT NOT NULL DEFAULT '[]',
+        color TEXT NOT NULL DEFAULT '#3f6b3b',
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
 ]
 
@@ -925,6 +983,118 @@ def increment_coupon_usage(code):
     conn.close()
 
 
+# ---- field plans / crop planner ----
+
+def list_field_plans():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM field_plans ORDER BY id DESC").fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def get_field_plan(plan_id):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM field_plans WHERE id = %s"), (plan_id,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def create_field_plan(name):
+    conn = get_conn()
+    cur = conn.execute(
+        _sql("INSERT INTO field_plans (name) VALUES (%s)") + _ret_id(), (name,)
+    )
+    plan_id = _insert_id(cur)
+    conn.commit()
+    conn.close()
+    return plan_id
+
+
+def update_field_plan(plan_id, fields):
+    if not fields:
+        return
+    conn = get_conn()
+    keys = list(fields.keys())
+    set_clause = ", ".join(f"{k} = %s" for k in keys)
+    conn.execute(_sql(f"UPDATE field_plans SET {set_clause} WHERE id = %s"), (*fields.values(), plan_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_field_plan(plan_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM field_plans WHERE id = %s"), (plan_id,))
+    conn.commit()
+    conn.close()
+
+
+def list_field_sections(plan_id):
+    conn = get_conn()
+    rows = conn.execute(
+        _sql("SELECT * FROM field_sections WHERE plan_id = %s ORDER BY id ASC"), (plan_id,)
+    ).fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def get_field_section(section_id):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM field_sections WHERE id = %s"), (section_id,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def create_field_section(plan_id, data):
+    conn = get_conn()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    cur = conn.execute(
+        _sql(
+            "INSERT INTO field_sections "
+            "(plan_id, name, plant_name, plant_variety, planting_date, growth_stage, "
+            "expected_harvest, notes, watering_schedule, points_json, color, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)" + _ret_id()
+        ),
+        (
+            plan_id,
+            data.get("name", ""),
+            data.get("plant_name", ""),
+            data.get("plant_variety", ""),
+            data.get("planting_date"),
+            data.get("growth_stage", "Saat"),
+            data.get("expected_harvest"),
+            data.get("notes", ""),
+            data.get("watering_schedule", ""),
+            data.get("points_json", "[]"),
+            data.get("color", "#3f6b3b"),
+            now,
+            now,
+        ),
+    )
+    section_id = _insert_id(cur)
+    conn.commit()
+    conn.close()
+    return section_id
+
+
+def update_field_section(section_id, fields):
+    if not fields:
+        return
+    conn = get_conn()
+    fields["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    keys = list(fields.keys())
+    set_clause = ", ".join(f"{k} = %s" for k in keys)
+    conn.execute(_sql(f"UPDATE field_sections SET {set_clause} WHERE id = %s"), (*fields.values(), section_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_field_section(section_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM field_sections WHERE id = %s"), (section_id,))
+    conn.commit()
+    conn.close()
+
+
 # ---- Backup / Restore ----
 
 # Reihenfolge: parents zuerst (FK-sicher für INSERT), Kinder für DELETE rückwärts.
@@ -940,6 +1110,8 @@ BACKUP_TABLES = [
     "visitor_days",
     "mail_log",
     "coupons",
+    "field_plans",
+    "field_sections",
 ]
 
 
