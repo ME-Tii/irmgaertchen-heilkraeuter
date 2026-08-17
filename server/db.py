@@ -78,7 +78,9 @@ SQLITE_SCHEMA = [
         items_json TEXT NOT NULL,
         subtotal_cents INTEGER NOT NULL DEFAULT 0,
         shipping_cents INTEGER NOT NULL DEFAULT 0,
+        discount_cents INTEGER NOT NULL DEFAULT 0,
         total_cents INTEGER NOT NULL DEFAULT 0,
+        coupon_code TEXT NOT NULL DEFAULT '',
         delivery_method TEXT NOT NULL DEFAULT 'pickup',
         delivery_street TEXT NOT NULL DEFAULT '',
         delivery_zip TEXT NOT NULL DEFAULT '',
@@ -140,6 +142,18 @@ SQLITE_SCHEMA = [
         error TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS coupons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        discount_type TEXT NOT NULL,
+        discount_value INTEGER NOT NULL,
+        min_total_cents INTEGER NOT NULL DEFAULT 0,
+        max_uses INTEGER NOT NULL DEFAULT 0,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        valid_from TEXT NOT NULL,
+        valid_until TEXT,
+        active INTEGER NOT NULL DEFAULT 1
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -179,7 +193,9 @@ PG_SCHEMA = [
         items_json TEXT NOT NULL,
         subtotal_cents INTEGER NOT NULL DEFAULT 0,
         shipping_cents INTEGER NOT NULL DEFAULT 0,
+        discount_cents INTEGER NOT NULL DEFAULT 0,
         total_cents INTEGER NOT NULL DEFAULT 0,
+        coupon_code TEXT NOT NULL DEFAULT '',
         delivery_method TEXT NOT NULL DEFAULT 'pickup',
         delivery_street TEXT NOT NULL DEFAULT '',
         delivery_zip TEXT NOT NULL DEFAULT '',
@@ -241,6 +257,18 @@ PG_SCHEMA = [
         error TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
+    """CREATE TABLE IF NOT EXISTS coupons (
+        id SERIAL PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        discount_type TEXT NOT NULL,
+        discount_value INTEGER NOT NULL,
+        min_total_cents INTEGER NOT NULL DEFAULT 0,
+        max_uses INTEGER NOT NULL DEFAULT 0,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        valid_from TEXT NOT NULL,
+        valid_until TEXT,
+        active INTEGER NOT NULL DEFAULT 1
+    );""",
 ]
 
 SCHEMA = PG_SCHEMA if USE_PG else SQLITE_SCHEMA
@@ -293,6 +321,12 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    for col in ("coupon_code", "discount_cents"):
+        try:
+            conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''" if col == "coupon_code" else f"ALTER TABLE orders ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
     prune_sessions(conn)
     for slug, info in CATALOG.items():
         conn.execute(
@@ -575,11 +609,12 @@ def create_order(order):
     conn = get_conn()
     cur = conn.execute(
         _sql("INSERT INTO orders (order_no, user_id, stripe_session_id, items_json, subtotal_cents, "
-             "shipping_cents, total_cents, delivery_method, delivery_street, delivery_zip, delivery_city, "
+             "shipping_cents, discount_cents, total_cents, coupon_code, "
+             "delivery_method, delivery_street, delivery_zip, delivery_city, "
              "customer_name, customer_email, customer_phone, status, customer_confirmed, customer_confirmed_at, "
              "return_requested, return_reason, return_processed, refunded, refunded_at, stripe_refund_id, "
              "stripe_payment_intent, created_at) "
-             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") + _ret_id(),
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") + _ret_id(),
         (
             order["order_no"],
             order.get("user_id"),
@@ -587,7 +622,9 @@ def create_order(order):
             json.dumps(order.get("items", []), ensure_ascii=False),
             order.get("subtotal_cents", 0),
             order.get("shipping_cents", 0),
+            order.get("discount_cents", 0),
             order.get("total_cents", 0),
+            order.get("coupon_code", ""),
             order.get("delivery_method", "pickup"),
             order.get("delivery_street", ""),
             order.get("delivery_zip", ""),
@@ -825,6 +862,66 @@ def get_daily_views(days=14):
     return out
 
 
+# ---- coupons ----
+
+
+def list_coupons():
+    conn = get_conn()
+    rows = conn.execute(_sql("SELECT * FROM coupons ORDER BY id DESC")).fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def get_coupon(code):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM coupons WHERE UPPER(code) = UPPER(%s)"), (code,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def get_coupon_by_id(coupon_id):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM coupons WHERE id = %s"), (coupon_id,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def add_coupon(code, discount_type, discount_value, min_total_cents, max_uses, valid_from, valid_until):
+    conn = get_conn()
+    cur = conn.execute(
+        _sql("INSERT INTO coupons (code, discount_type, discount_value, min_total_cents, max_uses, valid_from, valid_until) "
+             "VALUES (%s, %s, %s, %s, %s, %s, %s)") + _ret_id(),
+        (code.upper(), discount_type, discount_value, min_total_cents, max_uses, valid_from, valid_until),
+    )
+    cid = _insert_id(cur)
+    conn.commit()
+    conn.close()
+    return cid
+
+
+def update_coupon(coupon_id, fields):
+    conn = get_conn()
+    keys = list(fields.keys())
+    set_clause = ", ".join(f"{k} = %s" for k in keys)
+    conn.execute(_sql(f"UPDATE coupons SET {set_clause} WHERE id = %s"), (*fields.values(), coupon_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_coupon(coupon_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM coupons WHERE id = %s"), (coupon_id,))
+    conn.commit()
+    conn.close()
+
+
+def increment_coupon_usage(code):
+    conn = get_conn()
+    conn.execute(_sql("UPDATE coupons SET used_count = used_count + 1 WHERE UPPER(code) = UPPER(%s)"), (code,))
+    conn.commit()
+    conn.close()
+
+
 # ---- Backup / Restore ----
 
 # Reihenfolge: parents zuerst (FK-sicher für INSERT), Kinder für DELETE rückwärts.
@@ -839,6 +936,7 @@ BACKUP_TABLES = [
     "visitors",
     "visitor_days",
     "mail_log",
+    "coupons",
 ]
 
 

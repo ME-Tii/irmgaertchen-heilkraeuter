@@ -97,6 +97,10 @@
                 <span>Versand</span>
                 <span id="cartShipping">kostenlos</span>
               </div>
+              <div class="d-flex justify-content-between mb-2 d-none" id="cartDiscountRow">
+                <span id="cartDiscountLabel">Rabatt</span>
+                <span id="cartDiscount" class="text-success">-0,00 €</span>
+              </div>
               <div class="d-flex justify-content-between mb-3 fw-bold">
                 <span>Gesamt</span>
                 <span id="cartGrandTotal">0,00 €</span>
@@ -160,6 +164,14 @@
                   <input type="text" class="form-control" id="city" autocomplete="address-level2">
                 </div>
               </div>
+            </div>
+            <div class="mb-3">
+              <label for="couponInput" class="form-label fw-semibold">Gutscheincode</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="couponInput" placeholder="Code eingeben" style="text-transform:uppercase" maxlength="30">
+                <button type="button" class="btn btn-outline-irm" id="couponApplyBtn"><i class="bi bi-check2"></i> Anwenden</button>
+              </div>
+              <div id="couponFeedback" class="form-text"></div>
             </div>
             <div class="mb-3">
               <label for="message" class="form-label">Nachricht</label>
@@ -274,6 +286,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="assets/js/products.js?v=6"></script>
-  <script src="assets/js/main.js?v=7"></script>
+  <script src="assets/js/main.js?v=8"></script>
 </body>
 </html>

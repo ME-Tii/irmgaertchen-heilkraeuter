@@ -136,6 +136,7 @@ function cartTotal() {
 
 const SHIPPING_COST = 5.9;
 const FREE_SHIPPING_FROM = 40;
+let APPLIED_COUPON = null;
 
 function deliveryMode() {
   const el = document.querySelector('input[name="delivery"]:checked');
@@ -148,17 +149,28 @@ function shippingFee() {
 }
 
 function cartGrandTotal() {
-  return cartTotal() + shippingFee();
+  const discount = APPLIED_COUPON ? APPLIED_COUPON.discount_cents / 100 : 0;
+  return Math.max(0, cartTotal() + shippingFee() - discount);
 }
 
 function renderSummary() {
   const totalEl = document.getElementById("cartTotal");
   const shippingEl = document.getElementById("cartShipping");
   const grandEl = document.getElementById("cartGrandTotal");
+  const discountRow = document.getElementById("cartDiscountRow");
+  const discountEl = document.getElementById("cartDiscount");
+  const discountLabelEl = document.getElementById("cartDiscountLabel");
   if (totalEl) totalEl.textContent = cartTotal().toFixed(2).replace(".", ",") + " €";
   if (shippingEl) {
     const fee = shippingFee();
     shippingEl.textContent = fee === 0 ? "kostenlos" : fee.toFixed(2).replace(".", ",") + " €";
+  }
+  if (APPLIED_COUPON && APPLIED_COUPON.discount_cents > 0) {
+    if (discountRow) discountRow.classList.remove("d-none");
+    if (discountEl) discountEl.textContent = "-" + (APPLIED_COUPON.discount_cents / 100).toFixed(2).replace(".", ",") + " €";
+    if (discountLabelEl) discountLabelEl.textContent = "Rabatt (" + APPLIED_COUPON.code + ")";
+  } else {
+    if (discountRow) discountRow.classList.add("d-none");
   }
   if (grandEl) grandEl.textContent = cartGrandTotal().toFixed(2).replace(".", ",") + " €";
   const costLabel = document.getElementById("shipCostLabel");
@@ -166,6 +178,29 @@ function renderSummary() {
     costLabel.textContent =
       shippingFee() === 0 ? "(kostenlos, ab 40 € Warenwert)" : "(5,90 € – kostenlos ab 40 € Warenwert)";
   }
+}
+
+function applyCoupon() {
+  const input = document.getElementById("couponInput");
+  const feedback = document.getElementById("couponFeedback");
+  const code = (input ? input.value.trim() : "").toUpperCase();
+  if (!code) {
+    APPLIED_COUPON = null;
+    if (feedback) { feedback.textContent = ""; feedback.className = "form-text"; }
+    renderSummary();
+    return Promise.resolve();
+  }
+  return api("api/coupon/validate", "POST", { code: code, subtotal_cents: Math.round(cartTotal() * 100) })
+    .then((data) => {
+      APPLIED_COUPON = data;
+      if (feedback) { feedback.textContent = "Rabatt: -" + (data.discount_cents / 100).toFixed(2).replace(".", ",") + " €"; feedback.className = "form-text text-success"; }
+      renderSummary();
+    })
+    .catch((err) => {
+      APPLIED_COUPON = null;
+      if (feedback) { feedback.textContent = err.message; feedback.className = "form-text text-danger"; }
+      renderSummary();
+    });
 }
 
 function cartItemsCount() {
@@ -514,6 +549,7 @@ function startStripeCheckout() {
     shipping_address: { street: delivery.street, zip: delivery.zip, city: delivery.city },
     phone: val("phone"),
     name: (window.CURRENT_PROFILE || {}).name || "",
+    coupon_code: APPLIED_COUPON ? APPLIED_COUPON.code : "",
   };
   const snapshot = {
     user: user,
@@ -573,6 +609,15 @@ function renderConfirmation(order) {
       .join("");
   }
   set("confirmSubtotal", ((order.subtotal != null ? order.subtotal : order.total) || 0).toFixed(2).replace(".", ",") + " €");
+  const discountEl = document.getElementById("confirmDiscount");
+  if (discountEl) {
+    if (order.discount > 0 && order.couponCode) {
+      discountEl.textContent = "-" + order.discount.toFixed(2).replace(".", ",") + " € (" + order.couponCode + ")";
+      discountEl.parentElement.classList.remove("d-none");
+    } else {
+      discountEl.parentElement.classList.add("d-none");
+    }
+  }
   const shipEl = document.getElementById("confirmShipping");
   if (shipEl) {
     shipEl.textContent = typeof order.shipping === "number" ? (order.shipping === 0 ? "kostenlos" : order.shipping.toFixed(2).replace(".", ",") + " €") : "–";
@@ -725,6 +770,7 @@ function renderOrders() {
               ${shippingLine}
             </tbody>
           </table>
+          ${o.discount > 0 ? '<div class="text-end text-success small mb-1">Rabatt (' + esc(o.couponCode) + '): -' + o.discount.toFixed(2).replace(".", ",") + ' €</div>' : ""}
           <div class="text-end fw-bold">Gesamt: ${o.total.toFixed(2).replace(".", ",")} €</div>
           ${confirmBlock}
           ${returnBlock}
@@ -914,6 +960,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const checkoutModalEl = document.getElementById("checkoutModal");
   if (checkoutModalEl) {
     checkoutModalEl.addEventListener("show.bs.modal", () => {
+      APPLIED_COUPON = null;
+      const couponInput = document.getElementById("couponInput");
+      const couponFeedback = document.getElementById("couponFeedback");
+      if (couponInput) couponInput.value = "";
+      if (couponFeedback) { couponFeedback.textContent = ""; couponFeedback.className = "form-text"; }
       const p = window.CURRENT_PROFILE || {};
       const nameEl = document.getElementById("name");
       const emailEl = document.getElementById("email");
@@ -931,6 +982,17 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       renderSummary();
     });
+  }
+
+  const couponBtn = document.getElementById("couponApplyBtn");
+  if (couponBtn) {
+    couponBtn.addEventListener("click", () => applyCoupon());
+    const couponInput = document.getElementById("couponInput");
+    if (couponInput) {
+      couponInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); applyCoupon(); }
+      });
+    }
   }
 
   const profileForm = document.getElementById("profileForm");

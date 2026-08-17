@@ -115,15 +115,18 @@ function switchTab(tab) {
   const messagesPanel = document.getElementById("messagesPanel");
   const statsPanel = document.getElementById("statsPanel");
   const backupPanel = document.getElementById("backupPanel");
+  const couponsPanel = document.getElementById("couponsPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
   if (statsPanel) statsPanel.classList.toggle("d-none", tab !== "stats");
   if (backupPanel) backupPanel.classList.toggle("d-none", tab !== "backup");
+  if (couponsPanel) couponsPanel.classList.toggle("d-none", tab !== "coupons");
   try {
     if (tab === "inventory") renderInventory();
     if (tab === "messages") renderMessages();
     if (tab === "stats") loadStats();
+    if (tab === "coupons") renderCoupons();
   } catch (e) {
     console.error("Tab-Fehler:", e);
     showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
@@ -337,6 +340,10 @@ function renderDashboard() {
           ? "<span class='badge text-bg-dark small ms-1' title='Erstattet am " +
             (o.refundedAt ? new Date(o.refundedAt).toLocaleDateString("de-DE") : "?") +
             "'>Erstattet</span>"
+          : "") +
+        (o.couponCode
+          ? "<span class='badge text-bg-info small ms-1' title='Rabatt: -" +
+            (o.discount || 0).toFixed(2).replace(".", ",") + " €'>Gutschein: " + esc(o.couponCode) + "</span>"
           : "");
       const isShipping = o.delivery && o.delivery.method === "delivery";
       const statusList = isShipping ? STATUSES_SHIPPING : STATUSES;
@@ -349,7 +356,9 @@ function renderDashboard() {
         "<td>" + new Date(o.created_at).toLocaleString("de-DE") + "</td>" +
         "<td>" + contactCell(o) + "</td>" +
         "<td>" + items + "</td>" +
-        "<td>" + fmtMoney(o.total) + "</td>" +
+        "<td>" + fmtMoney(o.total) +
+        (o.discount > 0 ? '<br><small class="text-success">-' + (o.discount).toFixed(2).replace(".", ",") + " €</small>" : "") +
+        "</td>" +
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
         '<td class="text-end">' +
         (o.returnRequested && !o.returnProcessed
@@ -651,6 +660,7 @@ function renderInventory() {
 
 document.addEventListener("DOMContentLoaded", () => {
   renderAdmin();
+  initCouponForm();
 
   const loginForm = document.getElementById("adminLoginForm");
   if (loginForm) {
@@ -988,10 +998,187 @@ function restoreBackup() {
     .catch((err) => {
       backupShowMsg("backupRestoreMsg", (err && err.message ? err.message : "Wiederherstellung fehlgeschlagen."), "danger");
     })
-    .finally(() => {
+     .finally(() => {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-upload"></i> Sicherung einspielen';
       }
     });
+}
+
+// ---------------------------------------------------------------- coupons
+
+function generateCouponCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function renderCoupons() {
+  adminApi("api/admin/coupons")
+    .then((data) => {
+      const coupons = data.coupons || [];
+      const body = document.getElementById("couponsBody");
+      const empty = document.getElementById("couponsEmpty");
+      const tableArea = body ? body.closest(".table-responsive") : null;
+      if (!body) return;
+      if (coupons.length === 0) {
+        if (empty) empty.classList.remove("d-none");
+        if (tableArea) tableArea.classList.add("d-none");
+        return;
+      }
+      if (empty) empty.classList.add("d-none");
+      if (tableArea) tableArea.classList.remove("d-none");
+      const now = new Date().toISOString();
+      body.innerHTML = coupons
+        .map((c) => {
+          const valueLabel =
+            c.discount_type === "percent" ? c.discount_value + "%" : fmtMoney(c.discount_value / 100);
+          const minLabel = c.min_total_cents > 0 ? "ab " + fmtMoney(c.min_total_cents / 100) : "–";
+          const usesLabel = c.max_uses === 0 ? c.used_count + " / ∞" : c.used_count + " / " + c.max_uses;
+          const untilLabel = c.valid_until
+            ? new Date(c.valid_until).toLocaleDateString("de-DE")
+            : "Unbegrenzt";
+          let statusBadge;
+          if (!c.active) {
+            statusBadge = '<span class="badge bg-secondary">Deaktiviert</span>';
+          } else if (c.valid_until && c.valid_until < now) {
+            statusBadge = '<span class="badge bg-secondary">Abgelaufen</span>';
+          } else if (c.max_uses > 0 && c.used_count >= c.max_uses) {
+            statusBadge = '<span class="badge bg-warning text-dark">Aufgebraucht</span>';
+          } else {
+            statusBadge = '<span class="badge bg-success">Aktiv</span>';
+          }
+          return (
+            "<tr>" +
+            "<td><strong>" + esc(c.code) + "</strong></td>" +
+            "<td>" + (c.discount_type === "percent" ? "Prozent" : "Festbetrag") + "</td>" +
+            "<td>" + valueLabel + "</td>" +
+            "<td>" + minLabel + "</td>" +
+            "<td>" + usesLabel + "</td>" +
+            "<td>" + untilLabel + "</td>" +
+            "<td>" + statusBadge + "</td>" +
+            '<td class="text-end">' +
+            '<button class="btn btn-sm btn-outline-primary coupon-edit" data-id="' + c.id + '" title="Bearbeiten"><i class="bi bi-pencil"></i></button> ' +
+            '<button class="btn btn-sm btn-outline-danger coupon-delete" data-id="' + c.id + '" title="Löschen"><i class="bi bi-trash"></i></button>' +
+            "</td></tr>"
+          );
+        })
+        .join("");
+      body.querySelectorAll(".coupon-edit").forEach((btn) => {
+        btn.addEventListener("click", () => editCoupon(btn.dataset.id));
+      });
+      body.querySelectorAll(".coupon-delete").forEach((btn) => {
+        btn.addEventListener("click", () => deleteCoupon(btn.dataset.id));
+      });
+    })
+    .catch(() => {});
+}
+
+function editCoupon(id) {
+  adminApi("api/admin/coupons")
+    .then((data) => {
+      const c = (data.coupons || []).find((x) => String(x.id) === String(id));
+      if (!c) return;
+      document.getElementById("couponEditId").value = c.id;
+      document.getElementById("couponCode").value = c.code;
+      document.getElementById("couponCode").disabled = true;
+      document.getElementById("couponType").value = c.discount_type;
+      document.getElementById("couponValue").value = c.discount_value;
+      document.getElementById("couponMinTotal").value = (c.min_total_cents / 100).toFixed(2);
+      document.getElementById("couponMaxUses").value = c.max_uses;
+      if (c.valid_until) {
+        document.getElementById("couponValidUntil").value = c.valid_until.split("T")[0];
+      } else {
+        document.getElementById("couponValidUntil").value = "";
+      }
+      document.getElementById("couponCancelEdit").classList.remove("d-none");
+      updateCouponValueHint();
+    });
+}
+
+function deleteCoupon(id) {
+  if (!confirm("Gutschein wirklich löschen?")) return;
+  adminApi("api/admin/coupons/" + id, "DELETE")
+    .then(() => {
+      showMsg("couponsMsg", "Gutschein gelöscht.", "success");
+      renderCoupons();
+    })
+    .catch((err) => showMsg("couponsMsg", err.message, "danger"));
+}
+
+function updateCouponValueHint() {
+  const hint = document.getElementById("couponValueHint");
+  const type = document.getElementById("couponType").value;
+  if (hint) hint.textContent = type === "percent" ? "z.B. 10 = 10%" : "z.B. 500 = 5,00 €";
+}
+
+function initCouponForm() {
+  const form = document.getElementById("couponForm");
+  const randomBtn = document.getElementById("couponCodeRandom");
+  const cancelBtn = document.getElementById("couponCancelEdit");
+  const typeSelect = document.getElementById("couponType");
+
+  if (randomBtn) {
+    randomBtn.addEventListener("click", () => {
+      document.getElementById("couponCode").value = generateCouponCode();
+    });
+  }
+  if (typeSelect) {
+    typeSelect.addEventListener("change", updateCouponValueHint);
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      form.reset();
+      document.getElementById("couponEditId").value = "";
+      document.getElementById("couponCode").disabled = false;
+      cancelBtn.classList.add("d-none");
+      updateCouponValueHint();
+    });
+  }
+  if (form) {
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const editId = document.getElementById("couponEditId").value;
+      const code = document.getElementById("couponCode").value.trim().toUpperCase();
+      const dtype = document.getElementById("couponType").value;
+      const rawValue = document.getElementById("couponValue").value;
+      const value = dtype === "percent" ? parseInt(rawValue) : Math.round(parseFloat(rawValue) * 100);
+      const minTotal = Math.round((parseFloat(document.getElementById("couponMinTotal").value) || 0) * 100);
+      const maxUses = parseInt(document.getElementById("couponMaxUses").value) || 0;
+      const untilRaw = document.getElementById("couponValidUntil").value;
+      const validUntil = untilRaw ? untilRaw + "T23:59:59Z" : "";
+      if (!code || code.length < 2) {
+        showMsg("couponsMsg", "Code muss mindestens 2 Zeichen lang sein.", "danger");
+        return;
+      }
+      if (!value || value <= 0) {
+        showMsg("couponsMsg", "Bitte einen gültigen Rabattwert eingeben.", "danger");
+        return;
+      }
+      const body = {
+        code: code,
+        discount_type: dtype,
+        discount_value: value,
+        min_total_cents: minTotal,
+        max_uses: maxUses,
+        valid_until: validUntil,
+      };
+      const action = editId
+        ? adminApi("api/admin/coupons/" + editId, "PUT", body)
+        : adminApi("api/admin/coupons", "POST", body);
+      action
+        .then(() => {
+          showMsg("couponsMsg", editId ? "Gutschein aktualisiert." : "Gutschein angelegt.", "success");
+          form.reset();
+          document.getElementById("couponEditId").value = "";
+          document.getElementById("couponCode").disabled = false;
+          cancelBtn.classList.add("d-none");
+          updateCouponValueHint();
+          renderCoupons();
+        })
+        .catch((err) => showMsg("couponsMsg", err.message, "danger"));
+    });
+  }
 }

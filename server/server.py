@@ -218,6 +218,8 @@ def order_to_dict(order):
     d["items"] = json.loads(order.get("items_json") or "[]")
     d["subtotal"] = round(d["subtotal_cents"] / 100, 2)
     d["shipping"] = round(d["shipping_cents"] / 100, 2)
+    d["discount"] = round((d.get("discount_cents") or 0) / 100, 2)
+    d["couponCode"] = d.get("coupon_code") or ""
     d["total"] = round(d["total_cents"] / 100, 2)
     d["delivery"] = {
         "method": d["delivery_method"],
@@ -228,7 +230,9 @@ def order_to_dict(order):
     d.pop("items_json", None)
     d.pop("subtotal_cents", None)
     d.pop("shipping_cents", None)
+    d.pop("discount_cents", None)
     d.pop("total_cents", None)
+    d.pop("coupon_code", None)
     d.pop("delivery_method", None)
     d.pop("delivery_street", None)
     d.pop("delivery_zip", None)
@@ -579,6 +583,38 @@ def contact():
     return jsonify({"ok": True})
 
 
+@app.post("/api/coupon/validate")
+def coupon_validate():
+    data = request.get_json(silent=True) or {}
+    code = _clean_text(data.get("code"), 30)
+    subtotal = int(data.get("subtotal_cents") or 0)
+    if not code:
+        return err("Bitte geben Sie einen Gutscheincode ein.", 400)
+    coupon = db.get_coupon(code)
+    if not coupon or not coupon["active"]:
+        return err("Dieser Gutscheincode ist nicht gültig.", 400)
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if coupon.get("valid_from") and coupon["valid_from"] > now_iso:
+        return err("Dieser Gutscheincode ist noch nicht gültig.", 400)
+    if coupon.get("valid_until") and coupon["valid_until"] < now_iso:
+        return err("Dieser Gutscheincode ist abgelaufen.", 400)
+    if coupon["max_uses"] > 0 and coupon["used_count"] >= coupon["max_uses"]:
+        return err("Dieser Gutscheincode wurde bereits maximal oft verwendet.", 400)
+    if subtotal < coupon["min_total_cents"]:
+        min_total = coupon["min_total_cents"] / 100
+        return err(f"Der Mindestbestellwert für diesen Gutschein beträgt {min_total:.2f} €.", 400)
+    if coupon["discount_type"] == "percent":
+        discount_cents = int(subtotal * coupon["discount_value"] / 100)
+    else:
+        discount_cents = min(coupon["discount_value"], subtotal)
+    return jsonify({
+        "code": coupon["code"],
+        "discount_type": coupon["discount_type"],
+        "discount_value": coupon["discount_value"],
+        "discount_cents": discount_cents,
+    })
+
+
 @app.get("/api/config")
 def api_config():
     return jsonify({"googleLogin": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)})
@@ -765,6 +801,35 @@ def create_checkout_session():
             }
         )
 
+    coupon_code = ""
+    discount_cents = 0
+    coupon_data = data.get("coupon_code")
+    if coupon_data:
+        coupon_data = _clean_text(str(coupon_data), 30)
+        coupon = db.get_coupon(coupon_data)
+        if coupon and coupon["active"]:
+            now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            if (not coupon.get("valid_from") or coupon["valid_from"] <= now_iso) and \
+               (not coupon.get("valid_until") or coupon["valid_until"] >= now_iso) and \
+               (coupon["max_uses"] == 0 or coupon["used_count"] < coupon["max_uses"]) and \
+               subtotal_cents >= coupon["min_total_cents"]:
+                if coupon["discount_type"] == "percent":
+                    discount_cents = int(subtotal_cents * coupon["discount_value"] / 100)
+                else:
+                    discount_cents = min(coupon["discount_value"], subtotal_cents)
+                if discount_cents > 0:
+                    coupon_code = coupon["code"]
+                    line_items.append(
+                        {
+                            "price_data": {
+                                "currency": "eur",
+                                "product_data": {"name": f"Gutschein: {coupon_code}"},
+                                "unit_amount": -discount_cents,
+                            },
+                            "quantity": 1,
+                        }
+                    )
+
     order_no = gen_order_no()
     order = {
         "order_no": order_no,
@@ -772,7 +837,9 @@ def create_checkout_session():
         "items": resolved,
         "subtotal_cents": subtotal_cents,
         "shipping_cents": shipping_cents,
-        "total_cents": subtotal_cents + shipping_cents,
+        "discount_cents": discount_cents,
+        "coupon_code": coupon_code,
+        "total_cents": subtotal_cents + shipping_cents - discount_cents,
         "delivery_method": "delivery" if delivery else "pickup",
         "delivery_street": addr.get("street", "") if delivery else "",
         "delivery_zip": addr.get("zip", "") if delivery else "",
@@ -827,6 +894,8 @@ def _complete_paid_order(order, session_id, payment_intent):
         },
     )
     db.decrement_stock(order["items"])
+    if order.get("couponCode"):
+        db.increment_coupon_usage(order["couponCode"])
     user = db.get_user_by_id(order["user_id"]) if order["user_id"] else None
     mailer.notify_admin_order(
         order["order_no"],
@@ -1084,6 +1153,90 @@ def admin_delete_message(message_id):
     if bad:
         return bad
     db.delete_contact_message(message_id)
+    return jsonify({"ok": True})
+
+
+# ---- admin coupons ----
+
+
+@app.get("/api/admin/coupons")
+def admin_list_coupons():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify({"coupons": db.list_coupons()})
+
+
+@app.post("/api/admin/coupons")
+def admin_add_coupon():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    code = _clean_text(data.get("code"), 30)
+    dtype = _clean_text(data.get("discount_type"), 10)
+    value = int(data.get("discount_value") or 0)
+    min_total = int(data.get("min_total_cents") or 0)
+    max_uses = int(data.get("max_uses") or 0)
+    valid_from = _clean_text(data.get("valid_from"), 30)
+    valid_until = _clean_text(data.get("valid_until"), 30) or None
+    if not code or len(code) < 2:
+        return err("Gutscheincode muss mindestens 2 Zeichen lang sein.", 400)
+    if dtype not in ("percent", "fixed"):
+        return err("Typ muss 'percent' oder 'fixed' sein.", 400)
+    if value <= 0:
+        return err("Der Rabattwert muss größer als 0 sein.", 400)
+    if dtype == "percent" and value > 100:
+        return err("Prozent-Rabatt darf max. 100% sein.", 400)
+    if not valid_from:
+        valid_from = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if db.get_coupon(code):
+        return err("Dieser Code ist bereits vergeben.", 400)
+    cid = db.add_coupon(code, dtype, value, min_total, max_uses, valid_from, valid_until)
+    return jsonify({"ok": True, "id": cid})
+
+
+@app.put("/api/admin/coupons/<int:coupon_id>")
+def admin_update_coupon(coupon_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    coupon = db.get_coupon_by_id(coupon_id)
+    if not coupon:
+        return err("Gutschein nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    if "discount_type" in data:
+        dt = _clean_text(data["discount_type"], 10)
+        if dt not in ("percent", "fixed"):
+            return err("Typ muss 'percent' oder 'fixed' sein.", 400)
+        fields["discount_type"] = dt
+    if "discount_value" in data:
+        v = int(data["discount_value"])
+        if v <= 0:
+            return err("Der Rabattwert muss größer als 0 sein.", 400)
+        fields["discount_value"] = v
+    if "min_total_cents" in data:
+        fields["min_total_cents"] = int(data["min_total_cents"])
+    if "max_uses" in data:
+        fields["max_uses"] = int(data["max_uses"])
+    if "valid_from" in data:
+        fields["valid_from"] = _clean_text(data["valid_from"], 30)
+    if "valid_until" in data:
+        fields["valid_until"] = _clean_text(data["valid_until"], 30) or None
+    if "active" in data:
+        fields["active"] = int(bool(data["active"]))
+    if fields:
+        db.update_coupon(coupon_id, fields)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/coupons/<int:coupon_id>")
+def admin_delete_coupon(coupon_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    db.delete_coupon(coupon_id)
     return jsonify({"ok": True})
 
 
