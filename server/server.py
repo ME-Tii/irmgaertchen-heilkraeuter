@@ -819,16 +819,18 @@ def create_checkout_session():
                     discount_cents = min(coupon["discount_value"], subtotal_cents)
                 if discount_cents > 0:
                     coupon_code = coupon["code"]
-                    line_items.append(
-                        {
-                            "price_data": {
-                                "currency": "eur",
-                                "product_data": {"name": f"Gutschein: {coupon_code}"},
-                                "unit_amount": -discount_cents,
-                            },
-                            "quantity": 1,
-                        }
-                    )
+                    factor = (subtotal_cents - discount_cents) / subtotal_cents if subtotal_cents else 1
+                    running = 0
+                    product_items = [li for li in line_items if li["price_data"]["product_data"]["name"] != "Versand (Post)"]
+                    discounted_sub = subtotal_cents - discount_cents
+                    for idx, li in enumerate(product_items):
+                        qty = li.get("quantity", 1)
+                        if idx < len(product_items) - 1:
+                            li["price_data"]["unit_amount"] = max(1, int(li["price_data"]["unit_amount"] * factor))
+                            running += li["price_data"]["unit_amount"] * qty
+                        else:
+                            remaining = max(1, (discounted_sub - running) // qty)
+                            li["price_data"]["unit_amount"] = remaining
 
     order_no = gen_order_no()
     order = {
