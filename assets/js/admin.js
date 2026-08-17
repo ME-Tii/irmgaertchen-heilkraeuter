@@ -1109,9 +1109,9 @@ function deleteCoupon(id) {
 }
 
 function updateCouponValueHint() {
-  const hint = document.getElementById("couponValueHint");
+  const input = document.getElementById("couponValue");
   const type = document.getElementById("couponType").value;
-  if (hint) hint.textContent = type === "percent" ? "z.B. 10 = 10%" : "z.B. 500 = 5,00 €";
+  if (input) input.placeholder = type === "percent" ? "z.B. 10" : "z.B. 500";
 }
 
 function initCouponForm() {
