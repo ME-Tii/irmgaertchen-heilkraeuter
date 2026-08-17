@@ -795,16 +795,19 @@ def record_visitor(visitor_id, day):
 
 
 def get_daily_visitors(days=14):
-    rows = []
     conn = get_conn()
-    for i in range(days, 0, -1):
-        d = time.strftime("%Y-%m-%d", time.gmtime(time.time() - i * 86400))
-        r = conn.execute(
-            _sql("SELECT COUNT(*) AS c FROM visitor_days WHERE day = %s"), (d,)
-        ).fetchone()
-        rows.append({"date": d, "count": r["c"]})
+    start = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1) * 86400))
+    rows = conn.execute(
+        _sql("SELECT day, COUNT(*) AS c FROM visitor_days WHERE day >= %s GROUP BY day ORDER BY day"),
+        (start,),
+    ).fetchall()
     conn.close()
-    return rows
+    by_day = {r["day"]: r["c"] for r in rows}
+    out = []
+    for i in range(days):
+        d = time.strftime("%Y-%m-%d", time.gmtime(time.time() - (days - 1 - i) * 86400))
+        out.append({"date": d, "count": by_day.get(d, 0)})
+    return out
 
 
 def get_view_stats():
