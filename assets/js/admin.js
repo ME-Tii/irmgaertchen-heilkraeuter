@@ -1328,6 +1328,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+  const fpDimToggle = document.getElementById("fieldplanDimToggle");
+  if (fpDimToggle) {
+    fpDimToggle.addEventListener("click", () => {
+      fpState.showDimensions = !fpState.showDimensions;
+      fpDimToggle.classList.toggle("active", fpState.showDimensions);
+      renderFieldCanvas();
+    });
+  }
 });
 
 function openFieldPlanEditor(planId) {
@@ -1342,6 +1350,7 @@ function openFieldPlanEditor(planId) {
       fpState.selectedSection = null;
       fpState.image = null;
       fpState.colorIdx = 0;
+      fpState.showDimensions = true;
       document.getElementById("fieldplanList").classList.add("d-none");
       document.getElementById("fieldplanEditor").classList.remove("d-none");
       document.getElementById("fieldplanEditorTitle").textContent = data.plan.name;
@@ -1509,7 +1518,7 @@ function renderFieldCanvas() {
     ctx.fillText(hint, 10, hintY);
   }
 
-  drawDimensions(ctx, w, h);
+  if (fpState.showDimensions) drawDimensions(ctx, w, h);
 }
 
 function drawDimensions(ctx, w, h) {
