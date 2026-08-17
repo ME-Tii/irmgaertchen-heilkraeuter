@@ -1239,10 +1239,6 @@ function renderFieldPlanList() {
   if (empty) empty.classList.add("d-none");
   cards.innerHTML = plans.map((p) => {
     const img = p.image ? "/api/field-plans/" + p.id + "/image" : "";
-    const dims = p.width_meters && p.height_meters
-      ? ' <span class="fp-card-dims d-none">' + esc(String(p.width_meters)) + ' m × ' + esc(String(p.height_meters)) + ' m</span>' +
-        '<button class="btn btn-link btn-sm p-0 fp-card-toggle" title="Maße ein/ausblenden"><i class="bi bi-rulers"></i></button>'
-      : '';
     return (
       '<div class="col-md-6 col-lg-4">' +
       '<div class="card h-100">' +
@@ -1251,8 +1247,7 @@ function renderFieldPlanList() {
         : '<div class="card-img-top d-flex align-items-center justify-content-center bg-light" style="height:160px;"><i class="bi bi-image display-4 text-muted"></i></div>') +
       '<div class="card-body">' +
       '<h5 class="card-title">' + esc(p.name) + '</h5>' +
-      '<p class="card-text text-muted small mb-2">' + (p.section_count || 0) + ' Bereiche' + dims +
-      '</p>' +
+      '<p class="card-text text-muted small mb-2">' + (p.section_count || 0) + ' Bereiche</p>' +
       '</div>' +
       '<div class="card-footer d-flex gap-2">' +
       '<button class="btn btn-sm btn-irm fieldplan-edit" data-id="' + p.id + '"><i class="bi bi-pencil"></i> Bearbeiten</button> ' +
@@ -1271,12 +1266,6 @@ function renderFieldPlanList() {
           .then(() => { showMsg("fieldplanMsg", "Plan gelöscht.", "success"); loadFieldPlans(); })
           .catch((err) => showMsg("fieldplanMsg", err.message, "danger"));
       }
-    });
-  });
-  cards.querySelectorAll(".fp-card-toggle").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const span = btn.parentElement.querySelector(".fp-card-dims");
-      if (span) span.classList.toggle("d-none");
     });
   });
 }
@@ -1470,7 +1459,7 @@ function renderFieldCanvas() {
           areaPx += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
         }
         areaPx = Math.abs(areaPx) / 2;
-        const areaM2 = areaPx / (ppm * ppm);
+        const areaM2 = areaPx * w * h / (ppm * ppm);
         areaText = areaM2.toFixed(2) + " m²";
       }
       const lines = [];
@@ -1836,37 +1825,15 @@ function renderScalePanel() {
   const body = document.getElementById("fieldScaleBody");
   if (!body || !fpState.plan) return;
   const p = fpState.plan;
-  const hasManual = p.width_meters && p.height_meters;
   const hasCalib = p.calibration_x1 != null && p.calibration_meters;
   let html = "";
-  if (hasManual) {
-    html += '<p class="small mb-2"><strong>Manuell:</strong> ' + p.width_meters + ' m × ' + p.height_meters + ' m</p>';
-  } else if (hasCalib) {
+  if (hasCalib) {
     html += '<p class="small mb-2"><strong>Kalibriert:</strong> ' + p.calibration_meters + ' m Referenzlinie</p>';
-  }
-  html += '<hr class="my-2">';
-  html += '<p class="small text-muted mb-2">Manuelle Skalierung:</p>';
-  html += '<div class="row g-2 mb-2">';
-  html += '<div class="col-6"><input type="number" min="0.1" step="0.1" class="form-control form-control-sm" id="fpScaleW" placeholder="Breite (m)" value="' + (hasManual ? p.width_meters : '') + '"></div>';
-  html += '<div class="col-6"><input type="number" min="0.1" step="0.1" class="form-control form-control-sm" id="fpScaleH" placeholder="Höhe (m)" value="' + (hasManual ? p.height_meters : '') + '"></div>';
-  html += '</div>';
-  html += '<button class="btn btn-sm btn-outline-irm w-100 mb-2" id="fpScaleApply">Anwenden</button>';
-  if (hasManual || hasCalib) {
     html += '<button class="btn btn-sm btn-outline-danger w-100" id="fpScaleClear">Kalibrierung entfernen</button>';
+  } else {
+    html += '<p class="small text-muted mb-0">Nutzen Sie die Referenzlinie zur Kalibrierung.</p>';
   }
   body.innerHTML = html;
-  const applyBtn = document.getElementById("fpScaleApply");
-  if (applyBtn) {
-    applyBtn.addEventListener("click", () => {
-      const w = parseFloat(document.getElementById("fpScaleW").value);
-      const h = parseFloat(document.getElementById("fpScaleH").value);
-      if (!w || !h || w <= 0 || h <= 0) { showToast("Bitte Breite und Höhe > 0 eingeben."); return; }
-      adminApi("api/admin/field-plans/" + fpState.plan.id + "/calibrate", "POST", { width_meters: w, height_meters: h })
-        .then(() => { showToast("Skalierung gespeichert."); return reloadFieldPlan(); })
-        .then(renderScalePanel)
-        .catch((err) => showToast(err.message));
-    });
-  }
   const clearBtn = document.getElementById("fpScaleClear");
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
@@ -1902,6 +1869,16 @@ function showSectionPanel(section) {
     '<div class="mb-2">' +
     '<label class="form-label small">Sorte</label>' +
     '<input type="text" class="form-control form-control-sm" id="fsVariety" value="' + esc(section.plant_variety || '') + '" placeholder="z.B. Bergsalbei">' +
+    '</div>' +
+    '<div class="row g-2 mb-2">' +
+    '<div class="col-6">' +
+    '<label class="form-label small">Breite (m)</label>' +
+    '<input type="number" min="0" step="0.1" class="form-control form-control-sm" id="fsWidthM" value="' + (section.width_m != null ? section.width_m : '') + '" placeholder="z.B. 2.5">' +
+    '</div>' +
+    '<div class="col-6">' +
+    '<label class="form-label small">Höhe (m)</label>' +
+    '<input type="number" min="0" step="0.1" class="form-control form-control-sm" id="fsHeightM" value="' + (section.height_m != null ? section.height_m : '') + '" placeholder="z.B. 1.8">' +
+    '</div>' +
     '</div>' +
     '<div class="row g-2 mb-2">' +
     '<div class="col-6">' +
@@ -1953,6 +1930,8 @@ function saveSection(sectionId) {
     watering_schedule: document.getElementById("fsWater").value.trim(),
     notes: document.getElementById("fsNotes").value.trim(),
     color: document.getElementById("fsColor").value,
+    width_m: parseFloat(document.getElementById("fsWidthM").value) || null,
+    height_m: parseFloat(document.getElementById("fsHeightM").value) || null,
   };
   adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + sectionId, "PUT", data)
     .then(() => { showToast("Bereich gespeichert."); return reloadFieldPlan(); })

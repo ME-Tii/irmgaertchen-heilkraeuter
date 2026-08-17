@@ -180,6 +180,8 @@ SQLITE_SCHEMA = [
         watering_schedule TEXT NOT NULL DEFAULT '',
         points_json TEXT NOT NULL DEFAULT '[]',
         color TEXT NOT NULL DEFAULT '#3f6b3b',
+        width_m REAL,
+        height_m REAL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
@@ -324,6 +326,8 @@ PG_SCHEMA = [
         watering_schedule TEXT NOT NULL DEFAULT '',
         points_json TEXT NOT NULL DEFAULT '[]',
         color TEXT NOT NULL DEFAULT '#3f6b3b',
+        width_m REAL,
+        height_m REAL,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
@@ -386,6 +390,16 @@ def init_db():
         conn.rollback()
     try:
         conn.execute(_sql("ALTER TABLE field_plans ADD COLUMN image_mime TEXT NOT NULL DEFAULT ''"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE field_sections ADD COLUMN width_m REAL"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE field_sections ADD COLUMN height_m REAL"))
         conn.commit()
     except Exception:
         conn.rollback()

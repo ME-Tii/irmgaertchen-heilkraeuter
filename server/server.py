@@ -1558,7 +1558,8 @@ def admin_update_field_section(plan_id, section_id):
     data = request.get_json(silent=True) or {}
     fields = {}
     for key in ("name", "plant_name", "plant_variety", "planting_date",
-                "growth_stage", "expected_harvest", "notes", "watering_schedule", "color"):
+                "growth_stage", "expected_harvest", "notes", "watering_schedule", "color",
+                "width_m", "height_m"):
         if key in data:
             fields[key] = data[key] if key != "growth_stage" else (_clean_text(data[key], 50) or "Saaten")
     if "points" in data:
