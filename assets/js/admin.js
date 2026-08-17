@@ -1301,7 +1301,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const file = fpImageInput.files && fpImageInput.files[0];
       if (!file || !fpState.plan) return;
       adminUpload("api/admin/field-plans/" + fpState.plan.id + "/image", file)
-        .then(() => { showToast("Grundriss hochgeladen."); return reloadFieldPlan(); })
+        .then(() => { showToast("Grundriss hochgeladen."); fpImageInput.value = ""; return reloadFieldPlan(); })
         .catch((err) => showToast(err.message));
     });
   }
@@ -1393,7 +1393,7 @@ function loadFieldImage() {
     if (canvas) canvas.classList.add("d-none");
     if (noImg) noImg.classList.remove("d-none");
   };
-  img.src = "assets/img/" + fpState.plan.image;
+  img.src = "assets/img/" + fpState.plan.image + "?t=" + Date.now();
 }
 
 function setupCanvas() {
