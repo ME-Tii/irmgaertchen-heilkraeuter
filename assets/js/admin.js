@@ -1580,6 +1580,30 @@ function getPixelsPerMeter() {
   return null;
 }
 
+function computeSectionDims(section) {
+  const canvas = document.getElementById("fieldCanvas");
+  if (!canvas || !section || !section.points || section.points.length < 3) return null;
+  const ppm = getPixelsPerMeter();
+  if (!ppm) return null;
+  const pts = section.points;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const widthM = (maxX - minX) * canvas.width / ppm;
+  const heightM = (maxY - minY) * canvas.height / ppm;
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  const areaM2 = Math.abs(area) / 2 * canvas.width * canvas.height / (ppm * ppm);
+  return { width: widthM.toFixed(2), height: heightM.toFixed(2), area: areaM2.toFixed(2) };
+}
+
 function hexToRGBA(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -1857,6 +1881,14 @@ function showSectionPanel(section) {
   const growthOptions = GROWTH_STAGES.map(
     (g) => '<option value="' + g + '"' + (g === section.growth_stage ? " selected" : "") + '>' + g + '</option>'
   ).join("");
+  const dims = computeSectionDims(section);
+  const dimsHtml = dims
+    ? '<div class="row g-2 mb-2">' +
+      '<div class="col-4"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
+      '<div class="col-4"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
+      '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
+      '</div>'
+    : '';
   body.innerHTML =
     '<div class="mb-2">' +
     '<label class="form-label small">Name</label>' +
@@ -1870,16 +1902,7 @@ function showSectionPanel(section) {
     '<label class="form-label small">Sorte</label>' +
     '<input type="text" class="form-control form-control-sm" id="fsVariety" value="' + esc(section.plant_variety || '') + '" placeholder="z.B. Bergsalbei">' +
     '</div>' +
-    '<div class="row g-2 mb-2">' +
-    '<div class="col-6">' +
-    '<label class="form-label small">Breite (m)</label>' +
-    '<input type="number" min="0" step="0.1" class="form-control form-control-sm" id="fsWidthM" value="' + (section.width_m != null ? section.width_m : '') + '" placeholder="z.B. 2.5">' +
-    '</div>' +
-    '<div class="col-6">' +
-    '<label class="form-label small">Höhe (m)</label>' +
-    '<input type="number" min="0" step="0.1" class="form-control form-control-sm" id="fsHeightM" value="' + (section.height_m != null ? section.height_m : '') + '" placeholder="z.B. 1.8">' +
-    '</div>' +
-    '</div>' +
+    dimsHtml +
     '<div class="row g-2 mb-2">' +
     '<div class="col-6">' +
     '<label class="form-label small">Pflanzdatum</label>' +
@@ -1930,8 +1953,6 @@ function saveSection(sectionId) {
     watering_schedule: document.getElementById("fsWater").value.trim(),
     notes: document.getElementById("fsNotes").value.trim(),
     color: document.getElementById("fsColor").value,
-    width_m: parseFloat(document.getElementById("fsWidthM").value) || null,
-    height_m: parseFloat(document.getElementById("fsHeightM").value) || null,
   };
   adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + sectionId, "PUT", data)
     .then(() => { showToast("Bereich gespeichert."); return reloadFieldPlan(); })
