@@ -642,7 +642,23 @@ function renderInventory() {
             return loadInventory();
           })
           .then(renderInventory)
-    .catch((err) => showToast(err.message));
+          .catch((err) => showToast(err.message));
+      }
+    });
+  });
+  body.querySelectorAll(".product-details").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const product = (window.ADMIN_PRODUCTS || []).find((p) => p.id === btn.dataset.id);
+      if (!product) return;
+      document.getElementById("pdName").value = product.name || "";
+      document.getElementById("pdId").value = product.id || "";
+      document.getElementById("pdPrice").value = product.price != null ? product.price.toFixed(2) : "";
+      document.getElementById("pdStock").value = product.stock === null ? "" : product.stock;
+      document.getElementById("pdCategory").value = product.category || "";
+      document.getElementById("pdDesc").value = product.desc || "";
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("productDetailsModal")).show();
+    });
+  });
 }
 
 // ---- Phase 2: Total area summary
@@ -773,22 +789,6 @@ function renderTimeline() {
       '</div>';
   });
   el.innerHTML = headerHtml + barsHtml;
-}
-    });
-  });
-  body.querySelectorAll(".product-details").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const product = (window.ADMIN_PRODUCTS || []).find((p) => p.id === btn.dataset.id);
-      if (!product) return;
-      document.getElementById("pdName").value = product.name || "";
-      document.getElementById("pdId").value = product.id || "";
-      document.getElementById("pdPrice").value = product.price != null ? product.price.toFixed(2) : "";
-      document.getElementById("pdStock").value = product.stock === null ? "" : product.stock;
-      document.getElementById("pdCategory").value = product.category || "";
-      document.getElementById("pdDesc").value = product.desc || "";
-      bootstrap.Modal.getOrCreateInstance(document.getElementById("productDetailsModal")).show();
-    });
-  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
