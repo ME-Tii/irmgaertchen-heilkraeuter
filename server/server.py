@@ -907,6 +907,8 @@ def _complete_paid_order(order, session_id, payment_intent):
             "name": order.get("customerName") or (user["name"] if user else ""),
             "email": order.get("customerEmail") or (user["email"] if user else ""),
             "phone": order.get("customerPhone") or (user["phone"] if user else ""),
+            "couponCode": order.get("couponCode", ""),
+            "discount": order.get("discount", 0),
         },
     )
     mailer.notify_customer_order(order)

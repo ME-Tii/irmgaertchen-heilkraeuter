@@ -76,6 +76,9 @@ def notify_admin_order(order_no, total_euro, delivery_text, customer=None):
         f"Betrag: {total_euro} EUR\n",
         f"Lieferung: {delivery_text}\n",
     ]
+    if customer.get("couponCode"):
+        discount_euro = _fmt_euro(customer.get("discount", 0))
+        lines.append(f"Gutschein: {customer['couponCode']} (-{discount_euro} EUR)\n")
     if customer.get("name"):
         lines.append(f"Kunde: {customer['name']}\n")
     if customer.get("phone"):
@@ -108,6 +111,10 @@ def notify_customer_order(order, user_email=None):
             f"(= {_fmt_euro(it.get('total', 0))} EUR)\n"
         )
     lines.append(f"\nZwischensumme: {_fmt_euro(order.get('subtotal', 0))} EUR\n")
+    if order.get("discount") and order["discount"] > 0:
+        code = order.get("couponCode", "")
+        label = f"Gutscheincode {code}" if code else "Gutschein"
+        lines.append(f"{label}: -{_fmt_euro(order['discount'])} EUR\n")
     if order.get("shipping"):
         lines.append(f"Versand (Post): {_fmt_euro(order['shipping'])} EUR\n")
     else:
