@@ -1239,6 +1239,10 @@ function renderFieldPlanList() {
   if (empty) empty.classList.add("d-none");
   cards.innerHTML = plans.map((p) => {
     const img = p.image ? "assets/img/" + esc(p.image) : "";
+    const dims = p.width_meters && p.height_meters
+      ? ' <span class="fp-card-dims d-none">' + esc(String(p.width_meters)) + ' m × ' + esc(String(p.height_meters)) + ' m</span>' +
+        '<button class="btn btn-link btn-sm p-0 fp-card-toggle" title="Maße ein/ausblenden"><i class="bi bi-rulers"></i></button>'
+      : '';
     return (
       '<div class="col-md-6 col-lg-4">' +
       '<div class="card h-100">' +
@@ -1247,8 +1251,7 @@ function renderFieldPlanList() {
         : '<div class="card-img-top d-flex align-items-center justify-content-center bg-light" style="height:160px;"><i class="bi bi-image display-4 text-muted"></i></div>') +
       '<div class="card-body">' +
       '<h5 class="card-title">' + esc(p.name) + '</h5>' +
-      '<p class="card-text text-muted small mb-2">' + (p.section_count || 0) + ' Bereiche' +
-      (p.width_meters && p.height_meters ? ' · ' + p.width_meters + ' m × ' + p.height_meters + ' m' : '') +
+      '<p class="card-text text-muted small mb-2">' + (p.section_count || 0) + ' Bereiche' + dims +
       '</p>' +
       '</div>' +
       '<div class="card-footer d-flex gap-2">' +
@@ -1268,6 +1271,12 @@ function renderFieldPlanList() {
           .then(() => { showMsg("fieldplanMsg", "Plan gelöscht.", "success"); loadFieldPlans(); })
           .catch((err) => showMsg("fieldplanMsg", err.message, "danger"));
       }
+    });
+  });
+  cards.querySelectorAll(".fp-card-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const span = btn.parentElement.querySelector(".fp-card-dims");
+      if (span) span.classList.toggle("d-none");
     });
   });
 }
