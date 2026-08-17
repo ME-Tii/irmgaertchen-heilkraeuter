@@ -1411,6 +1411,7 @@ function setupCanvas() {
   canvas.onclick = onCanvasClick;
   canvas.ondblclick = onCanvasDblClick;
   canvas.onmousemove = onCanvasMouseMove;
+  canvas.oncontextmenu = onCanvasContextMenu;
   canvas.style.cursor = fpState.drawing ? "crosshair" : "default";
 }
 
@@ -1465,12 +1466,36 @@ function renderFieldCanvas() {
     ctx.setLineDash([6, 4]);
     ctx.stroke();
     ctx.setLineDash([]);
-    fpState.drawPoints.forEach((p) => {
+    fpState.drawPoints.forEach((p, idx) => {
       ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#ff4444";
+      ctx.arc(p.x * w, p.y * h, idx === 0 ? 6 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = idx === 0 ? "#ff8800" : "#ff4444";
       ctx.fill();
     });
+    if (fpState.drawPoints.length >= 3) {
+      const first = fpState.drawPoints[0];
+      const last = fpState.drawPoints[fpState.drawPoints.length - 1];
+      const dx = (last.x - first.x) * w;
+      const dy = (last.y - first.y) * h;
+      const close = Math.sqrt(dx * dx + dy * dy) < 15;
+      ctx.beginPath();
+      ctx.arc(first.x * w, first.y * h, 12, 0, Math.PI * 2);
+      ctx.strokeStyle = close ? "#00cc00" : "rgba(255,136,0,0.6)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    const hintY = 20;
+    ctx.font = "12px Inter, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const n = fpState.drawPoints.length;
+    let hint = n + " Punkt" + (n !== 1 ? "e" : "") + " · Doppelklick = fertig · Rechtsklick/Backspace = rückgängig · Esc = abbrechen";
+    if (n >= 3) hint = n + " Punkte · Auf ersten Punkt klicken = schließen · Enter = fertig · Rechtsklick/Backspace = rückgängig";
+    const tw = ctx.measureText(hint).width + 12;
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(4, hintY - 2, tw, 20);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(hint, 10, hintY);
   }
 
   drawDimensions(ctx, w, h);
@@ -1551,6 +1576,7 @@ function startDrawing() {
     drawBtn.innerHTML = '<i class="bi bi-x-lg"></i> Abbrechen';
     drawBtn.classList.add("active");
   }
+  document.addEventListener("keydown", onDrawKeydown);
   renderFieldCanvas();
 }
 
@@ -1564,10 +1590,12 @@ function cancelDrawing() {
     drawBtn.innerHTML = '<i class="bi bi-pencil-square"></i> Bereich zeichnen';
     drawBtn.classList.remove("active");
   }
+  document.removeEventListener("keydown", onDrawKeydown);
   renderFieldCanvas();
 }
 
 function onCanvasClick(e) {
+  if (e.button === 2) return;
   const canvas = e.target;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / canvas.width;
@@ -1584,6 +1612,15 @@ function onCanvasClick(e) {
   }
 
   if (fpState.drawing) {
+    if (fpState.drawPoints.length >= 3) {
+      const first = fpState.drawPoints[0];
+      const dx = (x - first.x) * canvas.width;
+      const dy = (y - first.y) * canvas.height;
+      if (Math.sqrt(dx * dx + dy * dy) < 15) {
+        finishDrawing();
+        return;
+      }
+    }
     fpState.drawPoints.push({ x, y });
     renderFieldCanvas();
     return;
@@ -1604,6 +1641,11 @@ function onCanvasClick(e) {
 function onCanvasDblClick(e) {
   if (!fpState.drawing || fpState.drawPoints.length < 3) return;
   e.preventDefault();
+  finishDrawing();
+}
+
+function finishDrawing() {
+  if (!fpState.drawing || fpState.drawPoints.length < 3) return;
   const points = fpState.drawPoints.slice();
   cancelDrawing();
   const color = FIELD_COLORS[fpState.colorIdx % FIELD_COLORS.length];
@@ -1628,6 +1670,31 @@ function onCanvasDblClick(e) {
       }
     })
     .catch((err) => showToast(err.message));
+}
+
+function undoDrawPoint() {
+  if (!fpState.drawing || fpState.drawPoints.length === 0) return;
+  fpState.drawPoints.pop();
+  renderFieldCanvas();
+}
+
+function onDrawKeydown(e) {
+  if (!fpState.drawing) return;
+  if (e.key === "Escape") {
+    cancelDrawing();
+  } else if (e.key === "Backspace" || e.key === "Delete" || (e.ctrlKey && e.key === "z")) {
+    e.preventDefault();
+    undoDrawPoint();
+  } else if (e.key === "Enter" && fpState.drawPoints.length >= 3) {
+    finishDrawing();
+  }
+}
+
+function onCanvasContextMenu(e) {
+  e.preventDefault();
+  if (fpState.drawing) {
+    undoDrawPoint();
+  }
 }
 
 function onCanvasMouseMove(e) {
