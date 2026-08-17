@@ -1212,6 +1212,7 @@ let fpState = {
   selectedSection: null,
   image: null,
   colorIdx: 0,
+  lastClickTime: 0,
 };
 
 function loadFieldPlans() {
@@ -1399,20 +1400,21 @@ function setupCanvas() {
   const container = document.getElementById("fieldCanvasContainer");
   const canvas = document.getElementById("fieldCanvas");
   if (!container || !canvas || !fpState.image) return;
-  const maxW = container.clientWidth || 800;
-  const ratio = fpState.image.height / fpState.image.width;
-  let w = maxW;
-  let h = Math.round(w * ratio);
-  if (h > 600) { h = 600; w = Math.round(h / ratio); }
-  canvas.width = w;
-  canvas.height = h;
-  canvas.style.width = w + "px";
-  canvas.style.height = h + "px";
   canvas.onclick = onCanvasClick;
   canvas.ondblclick = onCanvasDblClick;
   canvas.onmousemove = onCanvasMouseMove;
   canvas.oncontextmenu = onCanvasContextMenu;
   canvas.style.cursor = fpState.drawing ? "crosshair" : "default";
+  const cw = container.clientWidth || 800;
+  const ratio = fpState.image.height / fpState.image.width;
+  let w = cw;
+  let h = Math.round(w * ratio);
+  if (h > 600) { h = 600; w = Math.round(h / ratio); }
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = "100%";
+  canvas.style.height = "auto";
+  renderFieldCanvas();
 }
 
 function renderFieldCanvas() {
@@ -1596,10 +1598,13 @@ function cancelDrawing() {
 
 function onCanvasClick(e) {
   if (e.button === 2) return;
+  const now = Date.now();
+  if (now - fpState.lastClickTime < 300) return;
+  fpState.lastClickTime = now;
   const canvas = e.target;
   const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / canvas.width;
-  const y = (e.clientY - rect.top) / canvas.height;
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
 
   if (fpState.calibrating) {
     fpState.calibPoints.push({ x, y });
@@ -1614,8 +1619,8 @@ function onCanvasClick(e) {
   if (fpState.drawing) {
     if (fpState.drawPoints.length >= 3) {
       const first = fpState.drawPoints[0];
-      const dx = (x - first.x) * canvas.width;
-      const dy = (y - first.y) * canvas.height;
+      const dx = (x - first.x) * rect.width;
+      const dy = (y - first.y) * rect.height;
       if (Math.sqrt(dx * dx + dy * dy) < 15) {
         finishDrawing();
         return;
@@ -1701,8 +1706,8 @@ function onCanvasMouseMove(e) {
   if (!fpState.drawing) return;
   const canvas = e.target;
   const rect = canvas.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) / canvas.width;
-  const my = (e.clientY - rect.top) / canvas.height;
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
   renderFieldCanvas();
   const ctx = canvas.getContext("2d");
   const w = canvas.width;
