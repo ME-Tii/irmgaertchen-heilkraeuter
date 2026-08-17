@@ -642,8 +642,138 @@ function renderInventory() {
             return loadInventory();
           })
           .then(renderInventory)
-          .catch((err) => showToast(err.message));
-      }
+    .catch((err) => showToast(err.message));
+}
+
+// ---- Phase 2: Total area summary
+
+function computeTotalArea() {
+  const canvas = document.getElementById("fieldCanvas");
+  if (!canvas || !fpState.sections.length) return null;
+  const ppm = getPixelsPerMeter();
+  if (!ppm) return null;
+  let total = 0;
+  fpState.sections.forEach(function(s) {
+    const pts = s.points || [];
+    if (pts.length < 3) return;
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const j = (i + 1) % pts.length;
+      area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    }
+    total += Math.abs(area) / 2 * canvas.width * canvas.height / (ppm * ppm);
+  });
+  return total;
+}
+
+function renderPlanSummary() {
+  const el = document.getElementById("fieldplanSummary");
+  if (!el) return;
+  const total = computeTotalArea();
+  const count = fpState.sections.length;
+  if (!total && count === 0) {
+    el.innerHTML = "";
+    return;
+  }
+  let html = '<span class="me-3"><i class="bi bi-grid-3x3"></i> ' + count + ' Bereich' + (count !== 1 ? "e" : "") + '</span>';
+  if (total) html += '<span><i class="bi bi-aspect-ratio"></i> Gesamtfläche: ' + total.toFixed(2) + ' m²</span>';
+  el.innerHTML = html;
+}
+
+// ---- Phase 3: Companion planting (incompatible lines on canvas)
+
+function drawIncompatibleLines(ctx, w, h) {
+  fpState.sections.forEach(function(s1) {
+    const e1 = PLANT_CATALOG.find(function(c) { return c.name === (s1.plant_name || ""); });
+    if (!e1) return;
+    fpState.sections.forEach(function(s2) {
+      if (s2.id <= s1.id) return;
+      const e2 = PLANT_CATALOG.find(function(c) { return c.name === (s2.plant_name || ""); });
+      if (!e2) return;
+      if (e1.incompatible.indexOf(s2.plant_name) === -1 && e2.incompatible.indexOf(s1.plant_name) === -1) return;
+      const pts1 = s1.points || [];
+      const pts2 = s2.points || [];
+      if (pts1.length < 3 || pts2.length < 3) return;
+      const cx1 = pts1.reduce(function(s, p) { return s + p.x; }, 0) / pts1.length * w;
+      const cy1 = pts1.reduce(function(s, p) { return s + p.y; }, 0) / pts1.length * h;
+      const cx2 = pts2.reduce(function(s, p) { return s + p.x; }, 0) / pts2.length * w;
+      const cy2 = pts2.reduce(function(s, p) { return s + p.y; }, 0) / pts2.length * h;
+      ctx.beginPath();
+      ctx.moveTo(cx1, cy1);
+      ctx.lineTo(cx2, cy2);
+      ctx.strokeStyle = "rgba(220,53,69,0.6)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc((cx1 + cx2) / 2, (cy1 + cy2) / 2, 10, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(220,53,69,0.85)";
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 12px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("!", (cx1 + cx2) / 2, (cy1 + cy2) / 2);
+    });
+  });
+}
+
+// ---- Phase 4: Seasonal timeline
+
+function renderTimeline() {
+  const el = document.getElementById("fieldTimeline");
+  if (!el) return;
+  const items = [];
+  fpState.sections.forEach(function(s) {
+    if (!s.planting_date && !s.expected_harvest) return;
+    items.push({
+      name: s.plant_name || s.name || "Bereich",
+      start: s.planting_date || null,
+      end: s.expected_harvest || null,
+      color: s.color || "#3f6b3b"
+    });
+  });
+  if (items.length === 0) {
+    el.innerHTML = '<p class="text-muted small mb-0">Fügen Sie Pflanz- und Erntedaten hinzu, um den Zeitplan anzuzeigen.</p>';
+    return;
+  }
+  let minDate = null;
+  let maxDate = null;
+  items.forEach(function(it) {
+    if (it.start) { var d = new Date(it.start); if (!minDate || d < minDate) minDate = d; }
+    if (it.end) { var d2 = new Date(it.end); if (!maxDate || d2 > maxDate) maxDate = d2; }
+  });
+  if (!minDate) minDate = new Date();
+  if (!maxDate) maxDate = new Date(minDate);
+  if (minDate.getTime() === maxDate.getTime()) {
+    maxDate = new Date(minDate);
+    maxDate.setMonth(maxDate.getMonth() + 3);
+  }
+  var range = maxDate.getTime() - minDate.getTime();
+  if (range <= 0) range = 90 * 24 * 3600 * 1000;
+  var months = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  var headerHtml = '<div class="d-flex justify-content-between small text-muted mb-1">';
+  var m0 = minDate.getMonth();
+  for (var mi = 0; mi <= 6; mi++) {
+    var mIdx = (m0 + mi) % 12;
+    headerHtml += '<span>' + months[mIdx] + '</span>';
+  }
+  headerHtml += '</div>';
+  var barsHtml = '';
+  items.forEach(function(it) {
+    var s = it.start ? new Date(it.start) : minDate;
+    var e = it.end ? new Date(it.end) : new Date(s.getTime() + 60 * 24 * 3600 * 1000);
+    var left = Math.max(0, (s.getTime() - minDate.getTime()) / range * 100);
+    var width = Math.max(2, (e.getTime() - s.getTime()) / range * 100);
+    if (left + width > 100) width = 100 - left;
+    barsHtml += '<div class="position-relative mb-1" style="height:24px;">' +
+      '<div class="position-absolute rounded" style="left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + esc(it.color) + ';opacity:0.85;"></div>' +
+      '<span class="position-absolute small text-truncate" style="left:' + Math.max(0, left + 0.5) + '%;top:3px;line-height:18px;max-width:' + Math.max(5, width - 1) + '%;color:#fff;padding-left:4px;font-weight:500;">' + esc(it.name) + '</span>' +
+      '</div>';
+  });
+  el.innerHTML = headerHtml + barsHtml;
+}
     });
   });
   body.querySelectorAll(".product-details").forEach((btn) => {
@@ -1202,6 +1332,55 @@ const GROWTH_COLORS = {
   "Geerntet": "#6c757d",
 };
 
+const PLANT_CATALOG = [
+  { name: "Basilikum", category: "Küchenkräuter", watering: "Regelmäßig feucht halten", companions: ["Tomaten", "Paprika", "Chili"], incompatible: ["Salbei", "Rauten"] },
+  { name: "Petersilie", category: "Küchenkräuter", watering: "Gleichmäßig feucht", companions: ["Tomaten", "Chili", "Spargel"], incompatible: [] },
+  { name: "Dill", category: "Küchenkräuter", watering: "Gleichmäßig feucht", companions: ["Gurke", "Kohlsorten", "Zwiebeln"], incompatible: ["Karotten"] },
+  { name: "Schnittlauch", category: "Küchenkräuter", watering: "Mäßig feucht", companions: ["Tomaten", "Karotten"], incompatible: [] },
+  { name: "Koriander", category: "Küchenkräuter", watering: "Regelmäßig feucht", companions: ["Spinat", "Kohlsorten"], incompatible: ["Fenchel"] },
+  { name: "Kerbel", category: "Küchenkräuter", watering: "Gleichmäßig feucht", companions: ["Erbsen", "Tomaten"], incompatible: [] },
+  { name: "Liebstöckel", category: "Küchenkräuter", watering: "Mäßig feucht", companions: ["Tomaten", "Paprika", "Karotten"], incompatible: [] },
+  { name: "Borretsch", category: "Küchenkräuter", watering: "Regelmäßig feucht", companions: ["Tomaten", "Bohnen", "Zucchini"], incompatible: [] },
+  { name: "Ringelblume", category: "Heilkräuter", watering: "Mäßig feucht", companions: ["Tomaten", "Bohnen"], incompatible: [] },
+  { name: "Kamille", category: "Heilkräuter", watering: "Trocken bis mäßig", companions: ["Lavendel", "Thymian"], incompatible: ["Minze"] },
+  { name: "Lavendel", category: "Heilkräuter", watering: "Trocken halten", companions: ["Rosmarin", "Thymian", "Salbei"], incompatible: [] },
+  { name: "Salbei", category: "Heilkräuter", watering: "Trocken bis mäßig", companions: ["Rosmarin", "Thymian", "Lavendel"], incompatible: ["Basilikum", "Gurke"] },
+  { name: "Thymian", category: "Heilkräuter", watering: "Trocken halten", companions: ["Rosmarin", "Lavendel", "Salbei"], incompatible: [] },
+  { name: "Rosmarin", category: "Heilkräuter", watering: "Trocken halten", companions: ["Thymian", "Lavendel", "Salbei", "Bohnen"], incompatible: ["Gurke"] },
+  { name: "Minze", category: "Heilkräuter", watering: "Feucht halten", companions: ["Tomaten", "Lattich"], incompatible: ["Kamille", "Chamisso"] },
+  { name: "Echinacea", category: "Heilkräuter", watering: "Mäßig feucht", companions: ["Ringelblume", "Sonnenblume"], incompatible: [] },
+  { name: "Arnikablume", category: "Heilkräuter", watering: "Mäßig feucht", companions: ["Sonnenblume"], incompatible: [] },
+  { name: "Melisse", category: "Heilkräuter", watering: "Gleichmäßig feucht", companions: ["Tomaten", "Bohnen"], incompatible: ["Minze (Ausbreitung)"] },
+  { name: "Ysop", category: "Heilkräuter", watering: "Trocken bis mäßig", companions: ["Kohlsorten", "Salbei"], incompatible: [] },
+  { name: "Pfefferminze", category: "Heilkräuter", watering: "Feucht halten", companions: ["Tomaten", "Lattich"], incompatible: ["Kamille"] },
+  { name: "Johanniskraut", category: "Heilkräuter", watering: "Mäßig feucht", companions: ["Sonnenblume"], incompatible: [] },
+  { name: "Frauenmantel", category: "Heilkräuter", watering: "Gleichmäßig feucht", companions: ["Kamille"], incompatible: [] },
+  { name: "Beinwell", category: "Heilkräuter", watering: "Feucht halten", companions: ["Tomaten", "Bohnen"], incompatible: [] },
+  { name: "Oregano", category: "Küchenkräuter", watering: "Trocken bis mäßig", companions: ["Tomaten", "Paprika", "Bohnen"], incompatible: [] },
+  { name: "Majoran", category: "Küchenkräuter", watering: "Mäßig feucht", companions: ["Tomaten", "Paprika"], incompatible: [] },
+  { name: "Pimenton", category: "Küchenkräuter", watering: "Mäßig feucht", companions: ["Basilikum"], incompatible: [] },
+  { name: "Tomaten", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Basilikum", "Petersilie", "Karotten", "Ringelblume"], incompatible: ["Fenchel", "Kohlsorten"] },
+  { name: "Paprika", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Basilikum", "Tomaten", "Oregano"], incompatible: [] },
+  { name: "Chili", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Basilikum", "Tomaten", "Petersilie"], incompatible: [] },
+  { name: "Gurke", category: "Gemüse", watering: "Regelmäßig feucht halten", companions: ["Dill", "Erbsen", "Bohnen", "Sonnenblume"], incompatible: ["Salbei", "Rosmarin", "Minze"] },
+  { name: "Zucchini", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Borretsch", "Bohnen", "Mais"], incompatible: [] },
+  { name: "Kürbis", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Mais", "Bohnen", "Ringelblume"], incompatible: [] },
+  { name: "Tomate", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Basilikum", "Petersilie", "Karotten"], incompatible: ["Fenchel", "Kohlsorten"] },
+  { name: "Erbsen", category: "Gemüse", watering: "Gleichmäßig feucht", companions: ["Karotten", "Radieschen", "Gurke", "Dill"], incompatible: ["Zwiebeln", "Knoblauch"] },
+  { name: "Bohnen", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Gurke", "Kürbis", "Zucchini", "Salat"], incompatible: ["Zwiebeln", "Knoblauch", "Fenchel"] },
+  { name: "Karotten", category: "Gemüse", watering: "Gleichmäßig feucht", companions: ["Tomaten", "Erbsen", "Radieschen", "Schnittlauch"], incompatible: ["Dill"] },
+  { name: "Radieschen", category: "Gemüse", watering: "Gleichmäßig feucht", companions: ["Erbsen", "Karotten", "Salat", "Spinat"], incompatible: [] },
+  { name: "Spinat", category: "Gemüse", watering: "Gleichmäßig feucht", companions: ["Erbsen", "Radieschen", "Kohlsorten"], incompatible: [] },
+  { name: "Salat", category: "Gemüse", watering: "Gleichmäßig feucht", companions: ["Bohnen", "Karotten", "Radieschen"], incompatible: [] },
+  { name: "Kohlsorten", category: "Gemüse", watering: "Regelmäßig feucht", companions: ["Dill", "Salbei", "Spinat", "Ringelblume"], incompatible: ["Tomaten", "Erbsen", "Bohnen"] },
+  { name: "Zwiebeln", category: "Gemüse", watering: "Mäßig feucht", companions: ["Karotten", "Salat", "Tomaten"], incompatible: ["Erbsen", "Bohnen"] },
+  { name: "Knoblauch", category: "Gemüse", watering: "Mäßig feucht", companions: ["Tomaten", "Paprika", "Rosmarin"], incompatible: ["Erbsen", "Bohnen"] },
+  { name: "Fenchel", category: "Gemüse", watering: "Gleichmäßig feucht", companions: ["Koriander"], incompatible: ["Tomaten", "Bohnen", "Kohlsorten"] },
+  { name: "Sonnenblume", category: "Blumen", watering: "Mäßig feucht", companions: ["Gurke", "Kürbis", "Ringelblume"], incompatible: [] },
+  { name: "Tagetes", category: "Blumen", watering: "Mäßig feucht", companions: ["Tomaten", "Bohnen"], incompatible: [] },
+  { name: "Lattich", category: "Blumen", watering: "Gleichmäßig feucht", companions: ["Minze", "Pfefferminze"], incompatible: [] },
+];
+
 let fpState = {
   plan: null,
   sections: [],
@@ -1345,6 +1524,8 @@ function openFieldPlanEditor(planId) {
       document.getElementById("fieldplanEditorTitle").textContent = data.plan.name;
       showSectionPanel(null);
       renderScalePanel();
+      renderPlanSummary();
+      renderTimeline();
       loadFieldImage();
     })
     .catch((err) => showToast(err.message));
@@ -1376,6 +1557,8 @@ function reloadFieldPlan() {
     .then((data) => {
       fpState.plan = data.plan;
       fpState.sections = data.sections || [];
+      renderPlanSummary();
+      renderTimeline();
       loadFieldImage();
     });
 }
@@ -1526,6 +1709,7 @@ function renderFieldCanvas() {
   }
 
   if (fpState.showDimensions) drawDimensions(ctx, w, h);
+  drawIncompatibleLines(ctx, w, h);
 }
 
 function drawDimensions(ctx, w, h) {
@@ -1889,6 +2073,33 @@ function showSectionPanel(section) {
       '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
       '</div>'
     : '';
+  let companionHtml = '';
+  const plantEntry = PLANT_CATALOG.find(function(c) { return c.name === (section.plant_name || ""); });
+  if (plantEntry) {
+    const bad = [];
+    fpState.sections.forEach(function(other) {
+      if (other.id === section.id) return;
+      const otherEntry = PLANT_CATALOG.find(function(c) { return c.name === (other.plant_name || ""); });
+      if (!otherEntry) return;
+      if (plantEntry.incompatible.indexOf(other.plant_name) !== -1) {
+        bad.push(other.plant_name);
+      } else if (otherEntry.incompatible.indexOf(section.plant_name) !== -1) {
+        bad.push(other.plant_name);
+      }
+    });
+    if (bad.length > 0) {
+      companionHtml = '<div class="alert alert-warning py-1 px-2 small mb-2"><i class="bi bi-exclamation-triangle"></i> Nicht kompatibel mit: ' + esc(bad.join(", ")) + '</div>';
+    } else {
+      const compat = [];
+      fpState.sections.forEach(function(other) {
+        if (other.id === section.id) return;
+        if (plantEntry.companions.indexOf(other.plant_name) !== -1) compat.push(other.plant_name);
+      });
+      if (compat.length > 0) {
+        companionHtml = '<div class="alert alert-success py-1 px-2 small mb-2"><i class="bi bi-check-circle"></i> Gut zusammen mit: ' + esc(compat.join(", ")) + '</div>';
+      }
+    }
+  }
   body.innerHTML =
     '<div class="mb-2">' +
     '<label class="form-label small">Name</label>' +
@@ -1896,8 +2107,10 @@ function showSectionPanel(section) {
     '</div>' +
     '<div class="mb-2">' +
     '<label class="form-label small">Pflanze</label>' +
-    '<input type="text" class="form-control form-control-sm" id="fsPlant" value="' + esc(section.plant_name || '') + '" placeholder="z.B. Salbei">' +
+    '<input type="text" class="form-control form-control-sm" id="fsPlant" value="' + esc(section.plant_name || '') + '" placeholder="z.B. Salbei" list="plantDatalist">' +
+    '<datalist id="plantDatalist">' + PLANT_CATALOG.map(function(p) { return '<option value="' + esc(p.name) + '">'; }).join("") + '</datalist>' +
     '</div>' +
+    companionHtml +
     '<div class="mb-2">' +
     '<label class="form-label small">Sorte</label>' +
     '<input type="text" class="form-control form-control-sm" id="fsVariety" value="' + esc(section.plant_variety || '') + '" placeholder="z.B. Bergsalbei">' +
@@ -1940,6 +2153,18 @@ function showSectionPanel(section) {
       .then(() => { showToast("Bereich gelöscht."); fpState.selectedSection = null; showSectionPanel(null); return reloadFieldPlan(); })
       .catch((err) => showToast(err.message));
   });
+  var fsPlant = document.getElementById("fsPlant");
+  if (fsPlant) {
+    fsPlant.addEventListener("input", function() {
+      var entry = PLANT_CATALOG.find(function(c) { return c.name === fsPlant.value; });
+      if (entry) {
+        var waterInput = document.getElementById("fsWater");
+        if (waterInput && !waterInput.value.trim()) {
+          waterInput.value = entry.watering;
+        }
+      }
+    });
+  }
 }
 
 function saveSection(sectionId) {

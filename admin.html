@@ -346,6 +346,7 @@
 
           <div class="row g-3">
             <div class="col-lg-9">
+              <div id="fieldplanSummary" class="small text-muted mb-2 d-flex gap-3"></div>
               <div class="card">
                 <div class="card-body p-0 field-canvas-container" id="fieldCanvasContainer">
                   <div id="fieldplanNoImage" class="text-center py-5 text-muted">
@@ -354,6 +355,12 @@
                   </div>
                   <canvas id="fieldCanvas" class="d-none"></canvas>
                   <div id="fieldplanDimOverlay" class="d-none"></div>
+                </div>
+              </div>
+              <div class="card mt-3" id="fieldTimelineCard">
+                <div class="card-header"><i class="bi bi-calendar-range"></i> Zeitplan</div>
+                <div class="card-body" id="fieldTimeline">
+                  <p class="text-muted small mb-0">Fügen Sie Pflanz- und Erntedaten hinzu, um den Zeitplan anzuzeigen.</p>
                 </div>
               </div>
             </div>
