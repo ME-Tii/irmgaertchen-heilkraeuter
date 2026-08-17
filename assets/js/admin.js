@@ -1460,17 +1460,35 @@ function renderFieldCanvas() {
     if (pts.length >= 3) {
       const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length * w;
       const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length * h;
-      ctx.fillStyle = "#fff";
+      const label = s.plant_name || s.name || "";
+      const ppm = getPixelsPerMeter();
+      let areaText = "";
+      if (ppm && fpState.showDimensions) {
+        let areaPx = 0;
+        for (let i = 0; i < pts.length; i++) {
+          const j = (i + 1) % pts.length;
+          areaPx += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+        }
+        areaPx = Math.abs(areaPx) / 2;
+        const areaM2 = areaPx / (ppm * ppm);
+        areaText = areaM2.toFixed(2) + " m²";
+      }
+      const lines = [];
+      if (label) lines.push(label);
+      if (areaText) lines.push(areaText);
+      if (lines.length === 0) return;
       ctx.font = "bold 13px Inter, sans-serif";
+      const lineH = 18;
+      const totalH = lines.length * lineH + 6;
+      let maxW = 0;
+      for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width + 10);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(cx - maxW / 2, cy - totalH / 2, maxW, totalH);
+      ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const label = s.plant_name || s.name || "";
-      if (label) {
-        const tw = ctx.measureText(label).width + 10;
-        ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillRect(cx - tw / 2, cy - 10, tw, 20);
-        ctx.fillStyle = "#fff";
-        ctx.fillText(label, cx, cy);
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], cx, cy - totalH / 2 + lineH / 2 + 3 + i * lineH);
       }
     }
   });
