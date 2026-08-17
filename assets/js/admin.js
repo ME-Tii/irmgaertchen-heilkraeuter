@@ -1238,7 +1238,7 @@ function renderFieldPlanList() {
   }
   if (empty) empty.classList.add("d-none");
   cards.innerHTML = plans.map((p) => {
-    const img = p.image ? "assets/img/" + esc(p.image) : "";
+    const img = p.image ? "/api/field-plans/" + p.id + "/image" : "";
     const dims = p.width_meters && p.height_meters
       ? ' <span class="fp-card-dims d-none">' + esc(String(p.width_meters)) + ' m × ' + esc(String(p.height_meters)) + ' m</span>' +
         '<button class="btn btn-link btn-sm p-0 fp-card-toggle" title="Maße ein/ausblenden"><i class="bi bi-rulers"></i></button>'
