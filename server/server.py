@@ -1395,6 +1395,8 @@ def admin_list_field_plans():
     plans = db.list_field_plans()
     out = []
     for p in plans:
+        p.pop("image_data", None)
+        p.pop("image_mime", None)
         sections = db.list_field_sections(p["id"])
         out.append({**p, "section_count": len(sections)})
     return jsonify({"plans": out})
@@ -1421,6 +1423,8 @@ def admin_get_field_plan(plan_id):
     plan = db.get_field_plan(plan_id)
     if not plan:
         return err("Plan nicht gefunden.", 404)
+    plan.pop("image_data", None)
+    plan.pop("image_mime", None)
     sections = db.list_field_sections(plan_id)
     for s in sections:
         s["points"] = json.loads(s.get("points_json") or "[]")
