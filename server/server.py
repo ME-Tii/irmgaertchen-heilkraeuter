@@ -1626,21 +1626,26 @@ def public_plant_catalog():
 def public_current_planting():
     try:
         plans = db.list_field_plans()
-        if not plans:
-            return jsonify({"sections": []})
-        most_recent = plans[0]
-        secs = db.list_field_sections(most_recent["id"])
         all_sections = []
-        for s in secs:
-            if s.get("plant_name"):
-                all_sections.append({
-                    "plant_name": s["plant_name"],
-                    "name": s.get("name", ""),
-                    "planting_date": s.get("planting_date"),
-                    "expected_harvest": s.get("expected_harvest"),
-                    "color": s.get("color", ""),
-                })
-        return jsonify({"sections": all_sections})
+        for plan in plans:
+            secs = db.list_field_sections(plan["id"])
+            for s in secs:
+                if s.get("plant_name"):
+                    all_sections.append({
+                        "plant_name": s["plant_name"],
+                        "name": s.get("name", ""),
+                        "planting_date": s.get("planting_date"),
+                        "expected_harvest": s.get("expected_harvest"),
+                        "color": s.get("color", ""),
+                    })
+        best = {}
+        for s in all_sections:
+            key = s["plant_name"]
+            if key not in best:
+                best[key] = s
+            elif s.get("expected_harvest") and (not best[key].get("expected_harvest") or s["expected_harvest"] < best[key]["expected_harvest"]):
+                best[key] = s
+        return jsonify({"sections": list(best.values())})
     except Exception as e:
         return jsonify({"error": str(e), "sections": []}), 500
 
