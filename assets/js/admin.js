@@ -2217,12 +2217,8 @@ function showSectionPanel(section) {
     (g) => '<option value="' + g + '"' + (g === section.growth_stage ? " selected" : "") + '>' + g + '</option>'
   ).join("");
   const dims = computeSectionDims(section);
-  const dimsHtml = dims
-    ? '<div class="row g-2 mb-2">' +
-      '<div class="col-4"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
-      '<div class="col-4"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
-      '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
-      '</div>'
+  const areaHtml = dims
+    ? '<div class="mb-2"><span class="small text-muted">Fläche: </span><strong>' + dims.area + ' m²</strong></div>'
     : '';
   let companionHtml = '';
   const plantEntry = PLANT_CATALOG.find(function(c) { return c.name === (section.plant_name || ""); });
@@ -2266,7 +2262,7 @@ function showSectionPanel(section) {
     '<label class="form-label small">Sorte</label>' +
     '<input type="text" class="form-control form-control-sm" id="fsVariety" value="' + esc(section.plant_variety || '') + '" placeholder="z.B. Bergsalbei">' +
     '</div>' +
-    dimsHtml +
+    areaHtml +
     '<div class="row g-2 mb-2">' +
     '<div class="col-6">' +
     '<label class="form-label small">Pflanzdatum</label>' +
@@ -2281,13 +2277,15 @@ function showSectionPanel(section) {
     '<label class="form-label small">Wachstumsphase</label>' +
     '<select class="form-select form-select-sm" id="fsStage">' + growthOptions + '</select>' +
     '</div>' +
-    '<div class="mb-2">' +
-    '<label class="form-label small">Bewässerung</label>' +
-    '<input type="text" class="form-control form-control-sm" id="fsWater" value="' + esc(section.watering_schedule || '') + '" placeholder="z.B. Jeden 2. Tag">' +
-    '</div>' +
-    '<div class="mb-2">' +
+    '<div class="row g-2 mb-2">' +
+    '<div class="col-6">' +
     '<label class="form-label small">Intervall (Tage)</label>' +
     '<input type="number" class="form-control form-control-sm" id="fsWaterInterval" min="1" max="30" value="' + (section.watering_interval || '') + '" placeholder="z.B. 2">' +
+    '</div>' +
+    '<div class="col-6">' +
+    '<label class="form-label small">Zuletzt gegossen</label>' +
+    '<input type="date" class="form-control form-control-sm" id="fsWaterLast" value="' + (section.watering_last || '') + '">' +
+    '</div>' +
     '</div>' +
     '<div class="mb-2">' +
     '<label class="form-label small">Notizen</label>' +
@@ -2313,10 +2311,6 @@ function showSectionPanel(section) {
     fsPlant.addEventListener("input", function() {
       var entry = PLANT_CATALOG.find(function(c) { return c.name === fsPlant.value; });
       if (entry) {
-        var waterInput = document.getElementById("fsWater");
-        if (waterInput && !waterInput.value.trim()) {
-          waterInput.value = entry.watering;
-        }
         var intervalInput = document.getElementById("fsWaterInterval");
         if (intervalInput && !intervalInput.value) {
           var freq = getWateringFrequencyDays({ watering_schedule: entry.watering, plant_name: entry.name });
@@ -2329,6 +2323,7 @@ function showSectionPanel(section) {
 
 function saveSection(sectionId) {
   const intervalVal = document.getElementById("fsWaterInterval").value;
+  const lastVal = document.getElementById("fsWaterLast").value;
   const data = {
     name: document.getElementById("fsName").value.trim(),
     plant_name: document.getElementById("fsPlant").value.trim(),
@@ -2336,8 +2331,8 @@ function saveSection(sectionId) {
     planting_date: document.getElementById("fsPlantDate").value || null,
     expected_harvest: document.getElementById("fsHarvest").value || null,
     growth_stage: document.getElementById("fsStage").value,
-    watering_schedule: document.getElementById("fsWater").value.trim(),
     watering_interval: intervalVal ? parseInt(intervalVal) || null : null,
+    watering_last: lastVal || null,
     notes: document.getElementById("fsNotes").value.trim(),
     color: document.getElementById("fsColor").value,
   };
