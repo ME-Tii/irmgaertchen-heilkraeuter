@@ -354,10 +354,12 @@
       if (sections.length === 0) return;
       section.style.display = "";
       var items = [];
+      var seen = {};
       sections.forEach(function(s) {
-        if (!s.plant_name) return;
+        if (!s.plant_name || seen[s.plant_name]) return;
+        seen[s.plant_name] = true;
         items.push({
-          name: s.plant_name + (s.name ? " (" + s.name + ")" : ""),
+          name: s.plant_name,
           start: s.planting_date || null,
           end: s.expected_harvest || null,
           color: s.color || "#3f6b3b"
