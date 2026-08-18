@@ -178,6 +178,14 @@
     </section>
 
     <section class="mb-5">
+      <h2 class="mb-2">Unser Saisonkalender</h2>
+      <p class="text-muted mb-4">Wann ist welche Pflanze verfügbar oder erntereif? Eine Übersicht für Ihren Gartenplan.</p>
+      <div class="table-responsive" id="seasonalCalendar">
+        <p class="text-muted">Lade Daten...</p>
+      </div>
+    </section>
+
+    <section class="mb-5">
       <h2 class="mb-2">Zufriedene Kunden</h2>
       <p class="text-muted mb-4">Unsere Heilkräuter und Tees schätzen – vom Lebensmitteleinzelhandel bis zu Gastronomie und Naturkosthandel:</p>
       <div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-3 align-items-stretch">
@@ -338,5 +346,100 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="assets/js/products.js?v=6"></script>
   <script src="assets/js/main.js?v=8"></script>
+  <script>
+  (function() {
+    var MONTHS = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+    var PLANT_TIMING = {
+      "Basilikum": { startMonth: 4, endMonth: 9 },
+      "Petersilie": { startMonth: 3, endMonth: 10 },
+      "Dill": { startMonth: 4, endMonth: 9 },
+      "Schnittlauch": { startMonth: 3, endMonth: 10 },
+      "Koriander": { startMonth: 4, endMonth: 9 },
+      "Kerbel": { startMonth: 3, endMonth: 6 },
+      "Borretsch": { startMonth: 4, endMonth: 9 },
+      "Ringelblume": { startMonth: 5, endMonth: 9 },
+      "Kamille": { startMonth: 5, endMonth: 8 },
+      "Lavendel": { startMonth: 6, endMonth: 9 },
+      "Salbei": { startMonth: 5, endMonth: 10 },
+      "Thymian": { startMonth: 4, endMonth: 10 },
+      "Rosmarin": { startMonth: 1, endMonth: 12 },
+      "Minze": { startMonth: 5, endMonth: 10 },
+      "Echinacea": { startMonth: 6, endMonth: 9 },
+      "Melisse": { startMonth: 5, endMonth: 10 },
+      "Ysop": { startMonth: 6, endMonth: 9 },
+      "Pfefferminze": { startMonth: 5, endMonth: 10 },
+      "Oregano": { startMonth: 5, endMonth: 10 },
+      "Majoran": { startMonth: 5, endMonth: 9 },
+      "Tomaten": { startMonth: 6, endMonth: 9 },
+      "Paprika": { startMonth: 6, endMonth: 9 },
+      "Chili": { startMonth: 6, endMonth: 10 },
+      "Gurke": { startMonth: 5, endMonth: 9 },
+      "Zucchini": { startMonth: 6, endMonth: 9 },
+      "Kürbis": { startMonth: 8, endMonth: 10 },
+      "Erbsen": { startMonth: 4, endMonth: 6 },
+      "Bohnen": { startMonth: 5, endMonth: 8 },
+      "Karotten": { startMonth: 4, endMonth: 10 },
+      "Radieschen": { startMonth: 3, endMonth: 10 },
+      "Spinat": { startMonth: 3, endMonth: 6 },
+      "Salat": { startMonth: 3, endMonth: 6 },
+      "Kohlsorten": { startMonth: 4, endMonth: 10 },
+      "Zwiebeln": { startMonth: 5, endMonth: 9 },
+      "Fenchel": { startMonth: 5, endMonth: 9 },
+      "Sonnenblume": { startMonth: 6, endMonth: 9 },
+      "Tagetes": { startMonth: 5, endMonth: 10 },
+      "Lattich": { startMonth: 4, endMonth: 10 },
+    };
+    var CAT_ORDER = ["Heilkräuter", "Küchenkräuter", "Gemüse", "Blumen"];
+    var CAT_ICONS = { "Heilkräuter": "bi-flower1", "Küchenkräuter": "bi-cup-hot", "Gemüse": "bi-flower2", "Blumen": "bi-flower3" };
+    var now = new Date();
+    var currentMonth = now.getMonth();
+
+    fetch("/api/field-plans/plant-catalog").then(function(r) { return r.json(); }).then(function(data) {
+      var plants = (data.plants || []).filter(function(p) { return PLANT_TIMING[p.name]; });
+      if (plants.length === 0) {
+        document.getElementById("seasonalCalendar").innerHTML = '<p class="text-muted">Keine Daten verfügbar.</p>';
+        return;
+      }
+      var cats = {};
+      plants.forEach(function(p) {
+        var cat = p.category || "Sonstiges";
+        if (!cats[cat]) cats[cat] = [];
+        cats[cat].push(p);
+      });
+      var html = '<table class="table table-sm table-bordered mb-0 seasonal-table"><thead><tr>';
+      html += '<th style="min-width:140px">Pflanze</th>';
+      MONTHS.forEach(function(m, i) {
+        var cls = i === currentMonth ? ' class="table-active"' : '';
+        html += '<th' + cls + ' style="width:60px;text-align:center;font-size:.75rem">' + m + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+      CAT_ORDER.forEach(function(cat) {
+        if (!cats[cat]) return;
+        html += '<tr><td colspan="13" class="fw-bold small text-muted" style="background:transparent"><i class="bi ' + (CAT_ICONS[cat] || 'bi-circle') + '"></i> ' + cat + '</td></tr>';
+        cats[cat].sort(function(a, b) { return a.name.localeCompare(b.name); }).forEach(function(p) {
+          var t = PLANT_TIMING[p.name];
+          html += '<tr><td class="small fw-semibold">' + p.name + '</td>';
+          for (var m = 0; m < 12; m++) {
+            var inSeason = m >= (t.startMonth - 1) && m <= (t.endMonth - 1);
+            var isCurrent = m === currentMonth;
+            if (inSeason && isCurrent) {
+              html += '<td style="background:#28a745;text-align:center"><i class="bi bi-check-lg text-white"></i></td>';
+            } else if (inSeason) {
+              html += '<td style="background:#d4edda;text-align:center"><i class="bi bi-check-lg text-success"></i></td>';
+            } else {
+              html += '<td style="background:#f8f9fa;text-align:center"></td>';
+            }
+          }
+          html += '</tr>';
+        });
+      });
+      html += '</tbody></table>';
+      html += '<div class="mt-2 small text-muted"><i class="bi bi-check-lg text-success"></i> Erntezeit &nbsp; <span style="background:#28a745;padding:0 8px;border-radius:3px"><i class="bi bi-check-lg text-white"></i></span> Aktueller Monat</div>';
+      document.getElementById("seasonalCalendar").innerHTML = html;
+    }).catch(function() {
+      document.getElementById("seasonalCalendar").innerHTML = '<p class="text-muted">Daten konnten nicht geladen werden.</p>';
+    });
+  })();
+  </script>
 </body>
 </html>
