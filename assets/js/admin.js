@@ -906,126 +906,6 @@ function renderWateringCalendar() {
   });
 }
 
-// ---- Seedling calendar
-
-function renderSeedlingCalendar() {
-  var el = document.getElementById("fieldSeedlingBody");
-  if (!el) return;
-  var tasks = [];
-  fpState.sections.forEach(function(s) {
-    var plant = s.plant_name || "";
-    var timing = PLANT_TIMING[plant];
-    var pdate = s.planting_date;
-    var edate = s.expected_harvest;
-    if (!timing && !pdate) return;
-    var planting = pdate ? new Date(pdate) : null;
-    var harvest = edate ? new Date(edate) : null;
-    var area = 0;
-    if (s.points && s.points.length >= 3) {
-      var dims = computeSectionDims(s);
-      if (dims) area = parseFloat(dims.area);
-    }
-    if (timing && planting) {
-      var indoorDate = new Date(planting);
-      indoorDate.setDate(indoorDate.getDate() - timing.indoor_weeks * 7);
-      var outdoorDate = new Date(planting);
-      outdoorDate.setDate(outdoorDate.getDate() + timing.outdoor_weeks * 7);
-      tasks.push({ date: indoorDate, label: "Vorkultur", plant: plant, section: s.name || "", icon: "bi-house", area: area });
-      if (timing.outdoor_weeks !== 0 || timing.indoor_weeks > 0) {
-        tasks.push({ date: outdoorDate, label: "Auspflanzen/Säen", plant: plant, section: s.name || "", icon: "bi-plants", area: area });
-      }
-      var harvestStart = new Date(outdoorDate);
-      harvestStart.setDate(harvestStart.getDate() + timing.growing_weeks * 7);
-      var harvestEnd = new Date(harvestStart);
-      harvestEnd.setDate(harvestEnd.getDate() + timing.harvest_weeks * 7);
-      tasks.push({ date: harvestStart, label: "Ernte beginnt", plant: plant, section: s.name || "", icon: "bi-basket", area: area, endDate: harvestEnd });
-    } else if (planting && harvest) {
-      tasks.push({ date: planting, label: "Pflanzen", plant: plant, section: s.name || "", icon: "bi-plants", area: area });
-      tasks.push({ date: harvest, label: "Ernte", plant: plant, section: s.name || "", icon: "bi-basket", area: area });
-    }
-  });
-  if (tasks.length === 0) {
-    el.innerHTML = '<p class="text-muted small mb-0 p-3">Fügen Sie Pflanz- und Erntedaten hinzu.</p>';
-    return;
-  }
-  tasks.sort(function(a, b) { return a.date - b.date; });
-  var today = new Date();
-  today.setHours(0, 0, 0, 0);
-  var monthNames = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
-  var html = '';
-  var lastMonth = -1;
-  tasks.forEach(function(t) {
-    var m = t.date.getMonth();
-    if (m !== lastMonth) {
-      lastMonth = m;
-      html += '<div class="px-3 pt-2 pb-1 fw-bold small text-muted">' + monthNames[m] + ' ' + t.date.getFullYear() + '</div>';
-    }
-    var diffDays = Math.round((t.date - today) / 86400000);
-    var statusClass = diffDays < 0 ? "text-muted" : diffDays <= 7 ? "text-success fw-bold" : "";
-    var dateStr = t.date.getDate() + '. ' + monthNames[t.date.getMonth()];
-    if (t.endDate) dateStr += ' – ' + t.endDate.getDate() + '. ' + monthNames[t.endDate.getMonth()];
-    html += '<div class="d-flex align-items-center justify-content-between px-3 py-1 border-bottom ' + statusClass + '">';
-    html += '<div class="small"><i class="bi ' + (t.icon || 'bi-circle') + ' me-1"></i><strong>' + esc(t.plant) + '</strong>';
-    if (t.section) html += ' <span class="text-muted">(' + esc(t.section) + ')</span>';
-    html += '</div>';
-    html += '<div class="small text-nowrap">' + dateStr + '</div>';
-    html += '</div>';
-  });
-  el.innerHTML = html;
-}
-
-// ---- Crop rotation
-
-function renderRotationWarnings() {
-  var el = document.getElementById("fieldRotationBody");
-  if (!el) return;
-  if (!fpState.plan || fpState.sections.length === 0) {
-    el.innerHTML = '<p class="text-muted small mb-0 p-3">Speichern Sie Ihren Plan, um Fruchtfolge-Prüfungen zu aktivieren.</p>';
-    return;
-  }
-  var familyMap = {};
-  fpState.sections.forEach(function(s) {
-    if (s.plant_name && PLANT_FAMILIES[s.plant_name]) {
-      familyMap[s.plant_name] = PLANT_FAMILIES[s.plant_name];
-    }
-  });
-  var sectionsPayload = fpState.sections.map(function(s) {
-    return { name: s.name || "", plant_name: s.plant_name || "" };
-  });
-  adminApi("api/admin/rotation-conflicts", "POST", { sections: sectionsPayload, plant_families: PLANT_FAMILIES })
-    .then(function(data) {
-      var conflicts = data.conflicts || [];
-      if (conflicts.length === 0) {
-        el.innerHTML = '<p class="text-success small mb-0 p-3"><i class="bi bi-check-circle"></i> Keine Fruchtfolge-Konflikte.</p>';
-        return;
-      }
-      var html = '';
-      conflicts.forEach(function(c) {
-        html += '<div class="d-flex align-items-start px-3 py-2 border-bottom">';
-        html += '<i class="bi bi-exclamation-triangle text-warning me-2 mt-1"></i>';
-        html += '<div class="small">' + esc(c.message) + '</div>';
-        html += '</div>';
-      });
-      el.innerHTML = html;
-    })
-    .catch(function() {
-      el.innerHTML = '<p class="text-muted small mb-0 p-3">Fruchtfolge-Daten nicht verfügbar.</p>';
-    });
-}
-
-function saveRotationSnapshot() {
-  if (!fpState.plan) return;
-  var year = fpState.plan.year || new Date().getFullYear();
-  var sectionsPayload = fpState.sections.map(function(s) {
-    return { name: s.name || "", plant_name: s.plant_name || "" };
-  });
-  adminApi("api/admin/rotation-snapshot", "POST", {
-    plan_name: fpState.plan.name,
-    sections: sectionsPayload,
-    plan_year: year,
-  }).catch(function() {});
-}
-
 // ---- Phase 6: Plant catalog management
 
 function loadPlantCatalogForAdmin() {
@@ -2039,8 +1919,6 @@ function openFieldPlanEditor(planId) {
       renderPlanSummary();
       renderTimeline();
       renderWateringCalendar();
-      renderSeedlingCalendar();
-      renderRotationWarnings();
       loadFieldImage();
       loadPlantCatalogForAdmin();
       adminApi("api/admin/rotation-history").then(function(d) { window._lastRotationHistory = d.history || []; }).catch(function() { window._lastRotationHistory = []; });
@@ -2077,8 +1955,6 @@ function reloadFieldPlan() {
       renderPlanSummary();
       renderTimeline();
       renderWateringCalendar();
-      renderSeedlingCalendar();
-      renderRotationWarnings();
       loadFieldImage();
     });
 }
@@ -2938,6 +2814,6 @@ function saveSection(sectionId) {
   };
   adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + sectionId, "PUT", data)
     .then(() => { showToast("Bereich gespeichert."); return reloadFieldPlan(); })
-    .then(() => { renderFieldCanvas(); saveRotationSnapshot(); })
+    .then(() => { renderFieldCanvas(); })
     .catch((err) => showToast(err.message));
 }
