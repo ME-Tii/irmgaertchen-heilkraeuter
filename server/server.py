@@ -1510,8 +1510,10 @@ def admin_calibrate_field_plan(plan_id):
     data = request.get_json(silent=True) or {}
     fields = {}
     if "width_meters" in data and "height_meters" in data:
-        fields["width_meters"] = float(data["width_meters"])
-        fields["height_meters"] = float(data["height_meters"])
+        wm = data["width_meters"]
+        hm = data["height_meters"]
+        fields["width_meters"] = float(wm) if wm is not None else None
+        fields["height_meters"] = float(hm) if hm is not None else None
         fields["calibration_x1"] = None
         fields["calibration_y1"] = None
         fields["calibration_x2"] = None
