@@ -694,14 +694,21 @@ function renderPlanSummary() {
   let html = '<span class="me-3"><i class="bi bi-grid-3x3"></i> ' + count + ' Bereich' + (count !== 1 ? "e" : "") + '</span>';
   if (total) html += '<span class="me-3"><i class="bi bi-aspect-ratio"></i> Gesamtfläche: ' + total.toFixed(2) + ' m²</span>';
   let totalYield = 0;
+  let totalProfit = 0;
   fpState.sections.forEach(function(s) {
     var ykg = YIELD_KG_PER_M2[s.plant_name];
     if (ykg && s.points && s.points.length >= 3) {
       var dims = computeSectionDims(s);
-      if (dims) totalYield += ykg * parseFloat(dims.area);
+      if (dims) {
+        var kg = ykg * parseFloat(dims.area);
+        totalYield += kg;
+        var price = PRICE_PER_KG[s.plant_name];
+        if (price) totalProfit += kg * price;
+      }
     }
   });
-  if (totalYield > 0) html += '<span><i class="bi bi-basket"></i> Geschätzter Ertrag: ~' + totalYield.toFixed(1) + ' kg</span>';
+  if (totalYield > 0) html += '<span class="me-3"><i class="bi bi-basket"></i> Ertrag: ~' + totalYield.toFixed(1) + ' kg</span>';
+  if (totalProfit > 0) html += '<span><i class="bi bi-cash-coin"></i> Umsatz: ~' + totalProfit.toFixed(0) + ' €</span>';
   el.innerHTML = html;
 }
 
@@ -1604,6 +1611,22 @@ var YIELD_KG_PER_M2 = {
   "Spinat": 1.0, "Salat": 2.0, "Kohlsorten": 3.0,
   "Zwiebeln": 2.5, "Knoblauch": 0.8, "Fenchel": 1.5,
   "Sonnenblume": 0.3, "Tagetes": 0.1, "Lattich": 1.5,
+};
+
+var PRICE_PER_KG = {
+  "Basilikum": 15.0, "Petersilie": 10.0, "Dill": 10.0, "Schnittlauch": 12.0,
+  "Koriander": 8.0, "Kerbel": 10.0, "Liebstöckel": 8.0, "Borretsch": 10.0,
+  "Ringelblume": 20.0, "Kamille": 25.0, "Lavendel": 30.0, "Salbei": 12.0,
+  "Thymian": 12.0, "Rosmarin": 12.0, "Minze": 10.0, "Echinacea": 30.0,
+  "Arnikablume": 25.0, "Melisse": 12.0, "Ysop": 10.0, "Pfefferminze": 10.0,
+  "Johanniskraut": 20.0, "Frauenmantel": 8.0, "Beinwell": 15.0,
+  "Oregano": 12.0, "Majoran": 12.0, "Pimenton": 12.0,
+  "Tomaten": 3.5, "Paprika": 4.0, "Chili": 8.0, "Gurke": 2.5,
+  "Zucchini": 2.5, "Kürbis": 2.0, "Tomate": 3.5,
+  "Erbsen": 4.0, "Bohnen": 4.0, "Karotten": 2.5, "Radieschen": 5.0,
+  "Spinat": 3.0, "Salat": 3.0, "Kohlsorten": 2.5,
+  "Zwiebeln": 1.5, "Knoblauch": 8.0, "Fenchel": 3.0,
+  "Sonnenblume": 5.0, "Tagetes": 5.0, "Lattich": 3.0,
 };
 
 function getCatalogForDatalist() {
@@ -2549,12 +2572,14 @@ function showSectionPanel(section) {
   const dims = computeSectionDims(section);
   const dimsHtml = dims
     ? '<div class="row g-2 mb-2">' +
-      '<div class="col-3"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
-      '<div class="col-3"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
-      '<div class="col-3"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
-      '<div class="col-3">' +
-      (YIELD_KG_PER_M2[section.plant_name] ? '<span class="small text-muted d-block">Ertrag</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * parseFloat(dims.area)).toFixed(1) + ' kg</strong>' : '') +
-      '</div></div>'
+      '<div class="col-4"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
+      '<div class="col-4"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
+      '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
+      (YIELD_KG_PER_M2[section.plant_name] ?
+        '<div class="col-6"><span class="small text-muted d-block">Ertrag</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * parseFloat(dims.area)).toFixed(1) + ' kg</strong></div>' +
+        (PRICE_PER_KG[section.plant_name] ? '<div class="col-6"><span class="small text-muted d-block">Umsatz</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * PRICE_PER_KG[section.plant_name] * parseFloat(dims.area)).toFixed(0) + ' €</strong></div>' : '')
+        : '') +
+      '</div>'
     : '';
   let companionHtml = '';
   const plantEntry = getCatalogForDatalist().find(function(c) { return c.name === (section.plant_name || ""); });
