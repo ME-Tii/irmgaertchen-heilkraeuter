@@ -791,6 +791,104 @@ function renderTimeline() {
   el.innerHTML = headerHtml + barsHtml;
 }
 
+// ---- Phase 5: Watering calendar
+
+var WATERING_FREQ = {
+  "trocken halten": 7,
+  "trocken bis mäßig": 5,
+  "mäßig feucht": 3,
+  "gleichmäßig feucht": 2,
+  "feucht halten": 1,
+  "regelmäßig feucht halten": 1,
+  "regelmäßig feucht": 1
+};
+
+function getWateringFrequencyDays(schedule, plantName) {
+  var s = (schedule || "").toLowerCase().trim();
+  for (var key in WATERING_FREQ) {
+    if (s.indexOf(key) !== -1) return WATERING_FREQ[key];
+  }
+  var entry = PLANT_CATALOG.find(function(c) { return c.name === plantName; });
+  if (entry) {
+    var ws = (entry.watering || "").toLowerCase();
+    for (var k2 in WATERING_FREQ) {
+      if (ws.indexOf(k2) !== -1) return WATERING_FREQ[k2];
+    }
+  }
+  return 0;
+}
+
+function getNextWateringDate(section) {
+  var freq = getWateringFrequencyDays(section.watering_schedule, section.plant_name);
+  if (freq <= 0) return null;
+  var last = section.watering_last ? new Date(section.watering_last + "T00:00:00") : null;
+  if (!last) return new Date();
+  var next = new Date(last);
+  next.setDate(next.getDate() + freq);
+  return next;
+}
+
+function renderWateringCalendar() {
+  var el = document.getElementById("fieldWateringBody");
+  if (!el) return;
+  var sections = fpState.sections || [];
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var days = [];
+  var dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  for (var d = 0; d < 7; d++) {
+    var dt = new Date(today);
+    dt.setDate(dt.getDate() + d);
+    days.push({ date: dt, label: (d === 0 ? "Heute" : dayNames[dt.getDay()] + " " + dt.getDate() + "." + (dt.getMonth() + 1)), sections: [] });
+  }
+  sections.forEach(function(s) {
+    var next = getNextWateringDate(s);
+    if (!next) return;
+    next.setHours(0, 0, 0, 0);
+    var name = s.plant_name || s.name || "Bereich";
+    for (var i = 0; i < days.length; i++) {
+      var diff = Math.round((days[i].date.getTime() - next.getTime()) / 86400000);
+      var freq = getWateringFrequencyDays(s.watering_schedule, s.plant_name);
+      if (freq > 0 && diff >= 0 && diff % freq === 0) {
+        days[i].sections.push({ id: s.id, name: name, color: s.color || "#3f6b3b" });
+      }
+    }
+  });
+  var hasAny = days.some(function(d) { return d.sections.length > 0; });
+  if (!hasAny) {
+    el.innerHTML = '<p class="text-muted small mb-0 p-3">Fügen Sie Pflanzen mit Gießplan hinzu, um den Gießkalender anzuzeigen.</p>';
+    return;
+  }
+  var html = '<div class="d-flex flex-column" style="max-height:300px;overflow-y:auto;">';
+  days.forEach(function(d) {
+    html += '<div class="d-flex align-items-start border-bottom px-3 py-2' + (d.date.getTime() === today.getTime() ? ' bg-irm bg-opacity-10' : '') + '">';
+    html += '<div style="min-width:80px;" class="fw-bold small' + (d.date.getTime() === today.getTime() ? ' text-irm' : ' text-muted') + '">' + esc(d.label) + '</div>';
+    html += '<div class="d-flex flex-wrap gap-1">';
+    if (d.sections.length === 0) {
+      html += '<span class="text-muted small">—</span>';
+    } else {
+      d.sections.forEach(function(sec) {
+        html += '<span class="badge d-flex align-items-center gap-1" style="background:' + esc(sec.color) + ';color:#fff;font-weight:500;">' + esc(sec.name);
+        html += '<button class="btn btn-sm p-0 border-0 bg-transparent text-white lh-1 water-mark-btn" data-id="' + sec.id + '" title="Als gegossen markieren" style="font-size:0.7rem;">&#10003;</button>';
+        html += '</span>';
+      });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+  el.querySelectorAll(".water-mark-btn").forEach(function(btn) {
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      var sectionId = parseInt(btn.dataset.id);
+      adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + sectionId + "/water", "POST")
+        .then(function() { return reloadFieldPlan(); })
+        .then(function() { renderWateringCalendar(); })
+        .catch(function(err) { showToast(err.message); });
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   renderAdmin();
   initCouponForm();
@@ -1504,6 +1602,10 @@ document.addEventListener("DOMContentLoaded", () => {
       renderFieldCanvas();
     });
   }
+  const fpWaterRefresh = document.getElementById("fieldWateringRefresh");
+  if (fpWaterRefresh) {
+    fpWaterRefresh.addEventListener("click", () => { renderWateringCalendar(); });
+  }
 });
 
 function openFieldPlanEditor(planId) {
@@ -1526,6 +1628,7 @@ function openFieldPlanEditor(planId) {
       renderScalePanel();
       renderPlanSummary();
       renderTimeline();
+      renderWateringCalendar();
       loadFieldImage();
     })
     .catch((err) => showToast(err.message));
@@ -1559,6 +1662,7 @@ function reloadFieldPlan() {
       fpState.sections = data.sections || [];
       renderPlanSummary();
       renderTimeline();
+      renderWateringCalendar();
       loadFieldImage();
     });
 }

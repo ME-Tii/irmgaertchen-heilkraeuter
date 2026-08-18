@@ -1565,7 +1565,7 @@ def admin_update_field_section(plan_id, section_id):
     fields = {}
     for key in ("name", "plant_name", "plant_variety", "planting_date",
                 "growth_stage", "expected_harvest", "notes", "watering_schedule", "color",
-                "width_m", "height_m"):
+                "width_m", "height_m", "watering_last"):
         if key in data:
             fields[key] = data[key] if key != "growth_stage" else (_clean_text(data[key], 50) or "Saaten")
     if "points" in data:
@@ -1584,6 +1584,19 @@ def admin_delete_field_section(plan_id, section_id):
         return err("Bereich nicht gefunden.", 404)
     db.delete_field_section(section_id)
     return jsonify({"ok": True})
+
+
+@app.post("/api/admin/field-plans/<int:plan_id>/sections/<int:section_id>/water")
+def admin_water_field_section(plan_id, section_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    section = db.get_field_section(section_id)
+    if not section or section["plan_id"] != plan_id:
+        return err("Bereich nicht gefunden.", 404)
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    db.update_field_section(section_id, {"watering_last": today})
+    return jsonify({"ok": True, "watering_last": today})
 
 
 # ---------------------------------------------------------------- backup
