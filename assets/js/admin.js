@@ -1654,7 +1654,7 @@ function renderFieldCanvas() {
       const totalH = lines.length * lineH + 6;
       let maxW = 0;
       for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width + 10);
-      s._label = { x: cx, y: cy, w: maxW, h: totalH, lines: lines, lineH: lineH };
+      s._label = { x: cx, y: cy, ox: cx, oy: cy, w: maxW, h: totalH, lines: lines, lineH: lineH };
     }
   });
 
@@ -1686,6 +1686,19 @@ function renderFieldCanvas() {
   fpState.sections.forEach((s) => {
     const lbl = s._label;
     if (!lbl) return;
+    const displaced = Math.abs(lbl.x - lbl.ox) > 1 || Math.abs(lbl.y - lbl.oy) > 1;
+    if (displaced) {
+      ctx.beginPath();
+      ctx.moveTo(lbl.ox, lbl.oy);
+      ctx.lineTo(lbl.x, lbl.y);
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(lbl.ox, lbl.oy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fill();
+    }
     ctx.font = "bold 13px Inter, sans-serif";
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(lbl.x - lbl.w / 2, lbl.y - lbl.h / 2, lbl.w, lbl.h);
