@@ -1654,15 +1654,48 @@ function renderFieldCanvas() {
       const totalH = lines.length * lineH + 6;
       let maxW = 0;
       for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width + 10);
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(cx - maxW / 2, cy - totalH / 2, maxW, totalH);
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], cx, cy - totalH / 2 + lineH / 2 + 3 + i * lineH);
+      s._label = { x: cx, y: cy, w: maxW, h: totalH, lines: lines, lineH: lineH };
+    }
+  });
+
+  const labelList = fpState.sections.map((s) => s._label).filter(Boolean);
+  for (let iter = 0; iter < 50; iter++) {
+    let moved = false;
+    for (let i = 0; i < labelList.length; i++) {
+      for (let j = i + 1; j < labelList.length; j++) {
+        const a = labelList[i], b = labelList[j];
+        const overlapX = (a.w / 2 + b.w / 2) - Math.abs(a.x - b.x);
+        const overlapY = (a.h / 2 + b.h / 2) - Math.abs(a.y - b.y);
+        if (overlapX > 0 && overlapY > 0) {
+          moved = true;
+          const dx = a.x - b.x || 1;
+          const dy = a.y - b.y || 1;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const pushX = dx / dist * overlapX / 2;
+          const pushY = dy / dist * overlapY / 2;
+          a.x += pushX;
+          a.y += pushY;
+          b.x -= pushX;
+          b.y -= pushY;
+        }
       }
     }
+    if (!moved) break;
+  }
+
+  fpState.sections.forEach((s) => {
+    const lbl = s._label;
+    if (!lbl) return;
+    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(lbl.x - lbl.w / 2, lbl.y - lbl.h / 2, lbl.w, lbl.h);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < lbl.lines.length; i++) {
+      ctx.fillText(lbl.lines[i], lbl.x, lbl.y - lbl.h / 2 + lbl.lineH / 2 + 3 + i * lbl.lineH);
+    }
+    delete s._label;
   });
 
   if (fpState.drawPoints.length > 0) {
