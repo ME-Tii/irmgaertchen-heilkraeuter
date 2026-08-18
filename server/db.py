@@ -1403,6 +1403,8 @@ BACKUP_TABLES = [
     "coupons",
     "field_plans",
     "field_sections",
+    "plant_catalog",
+    "crop_rotation_history",
 ]
 
 
