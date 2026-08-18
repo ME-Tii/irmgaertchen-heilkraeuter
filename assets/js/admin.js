@@ -1907,6 +1907,20 @@ function renderFieldCanvas() {
     if (pts.length >= 3) {
       const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length * w;
       const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length * h;
+      const isMobile = window.innerWidth <= 768;
+      const isSelected = fpState.selectedSection === s.id;
+      if (isMobile && !isSelected) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        return;
+      }
       const label = s.plant_name || s.name || "";
       const ppm = getPixelsPerMeter();
       let areaText = "";
