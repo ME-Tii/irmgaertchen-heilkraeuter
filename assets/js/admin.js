@@ -1595,14 +1595,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-  const fpDimToggle = document.getElementById("fieldplanDimToggle");
-  if (fpDimToggle) {
-    fpDimToggle.addEventListener("click", () => {
-      fpState.showDimensions = !fpState.showDimensions;
-      fpDimToggle.classList.toggle("active", fpState.showDimensions);
-      renderFieldCanvas();
-    });
-  }
   const fpWaterRefresh = document.getElementById("fieldWateringRefresh");
   if (fpWaterRefresh) {
     fpWaterRefresh.addEventListener("click", () => { renderWateringCalendar(); });
@@ -1621,7 +1613,6 @@ function openFieldPlanEditor(planId) {
       fpState.selectedSection = null;
       fpState.image = null;
       fpState.colorIdx = 0;
-      fpState.showDimensions = true;
       document.getElementById("fieldplanList").classList.add("d-none");
       document.getElementById("fieldplanEditor").classList.remove("d-none");
       document.getElementById("fieldplanEditorTitle").textContent = data.plan.name;
@@ -1740,7 +1731,7 @@ function renderFieldCanvas() {
       const label = s.plant_name || s.name || "";
       const ppm = getPixelsPerMeter();
       let areaText = "";
-      if (ppm && fpState.showDimensions) {
+      if (ppm) {
         let areaPx = 0;
         for (let i = 0; i < pts.length; i++) {
           const j = (i + 1) % pts.length;
@@ -1859,7 +1850,6 @@ function renderFieldCanvas() {
     ctx.fillText(hint, 10, hintY);
   }
 
-  if (fpState.showDimensions) drawDimensions(ctx, w, h);
   drawIncompatibleLines(ctx, w, h);
 }
 
@@ -2217,8 +2207,12 @@ function showSectionPanel(section) {
     (g) => '<option value="' + g + '"' + (g === section.growth_stage ? " selected" : "") + '>' + g + '</option>'
   ).join("");
   const dims = computeSectionDims(section);
-  const areaHtml = dims
-    ? '<div class="mb-2"><span class="small text-muted">Fläche: </span><strong>' + dims.area + ' m²</strong></div>'
+  const dimsHtml = dims
+    ? '<div class="row g-2 mb-2">' +
+      '<div class="col-4"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
+      '<div class="col-4"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
+      '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
+      '</div>'
     : '';
   let companionHtml = '';
   const plantEntry = PLANT_CATALOG.find(function(c) { return c.name === (section.plant_name || ""); });
@@ -2262,7 +2256,7 @@ function showSectionPanel(section) {
     '<label class="form-label small">Sorte</label>' +
     '<input type="text" class="form-control form-control-sm" id="fsVariety" value="' + esc(section.plant_variety || '') + '" placeholder="z.B. Bergsalbei">' +
     '</div>' +
-    areaHtml +
+    dimsHtml +
     '<div class="row g-2 mb-2">' +
     '<div class="col-6">' +
     '<label class="form-label small">Pflanzdatum</label>' +
