@@ -195,6 +195,7 @@ SQLITE_SCHEMA = [
         companions TEXT NOT NULL DEFAULT '[]',
         incompatible TEXT NOT NULL DEFAULT '[]',
         yield_kg REAL,
+        price_per_kg REAL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
@@ -354,6 +355,7 @@ PG_SCHEMA = [
         companions TEXT NOT NULL DEFAULT '[]',
         incompatible TEXT NOT NULL DEFAULT '[]',
         yield_kg REAL,
+        price_per_kg REAL,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
@@ -436,6 +438,11 @@ def init_db():
         conn.rollback()
     try:
         conn.execute(_sql("ALTER TABLE field_sections ADD COLUMN watering_interval INTEGER"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE plant_catalog ADD COLUMN price_per_kg REAL"))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1178,8 +1185,8 @@ def create_plant_catalog_entry(data):
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     cur = conn.execute(
         _sql(
-            "INSERT INTO plant_catalog (name, category, watering, companions, incompatible, yield_kg, created_at, updated_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)" + _ret_id()
+            "INSERT INTO plant_catalog (name, category, watering, companions, incompatible, yield_kg, price_per_kg, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)" + _ret_id()
         ),
         (
             data.get("name", ""),
@@ -1188,6 +1195,7 @@ def create_plant_catalog_entry(data):
             json.dumps(data.get("companions", []), ensure_ascii=False),
             json.dumps(data.get("incompatible", []), ensure_ascii=False),
             data.get("yield_kg"),
+            data.get("price_per_kg"),
             now,
             now,
         ),
@@ -1222,57 +1230,57 @@ def seed_plant_catalog(conn):
     if cur.fetchone()["c"] > 0:
         return
     plants = [
-        ("Basilikum", "Küchenkräuter", "Regelmäßig feucht halten", ["Tomaten", "Paprika", "Chili"], ["Salbei", "Rauten"], 0.8),
-        ("Petersilie", "Küchenkräuter", "Gleichmäßig feucht", ["Tomaten", "Chili", "Spargel"], [], 0.6),
-        ("Dill", "Küchenkräuter", "Gleichmäßig feucht", ["Gurke", "Kohlsorten", "Zwiebeln"], ["Karotten"], 0.5),
-        ("Schnittlauch", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Karotten"], [], 0.5),
-        ("Koriander", "Küchenkräuter", "Regelmäßig feucht", ["Spinat", "Kohlsorten"], ["Fenchel"], 0.4),
-        ("Kerbel", "Küchenkräuter", "Gleichmäßig feucht", ["Erbsen", "Tomaten"], [], 0.3),
-        ("Liebstöckel", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Paprika", "Karotten"], [], 0.5),
-        ("Borretsch", "Küchenkräuter", "Regelmäßig feucht", ["Tomaten", "Bohnen", "Zucchini"], [], 0.3),
-        ("Ringelblume", "Heilkräuter", "Mäßig feucht", ["Tomaten", "Bohnen"], [], 0.2),
-        ("Kamille", "Heilkräuter", "Trocken bis mäßig", ["Lavendel", "Thymian"], ["Minze"], 0.1),
-        ("Lavendel", "Heilkräuter", "Trocken halten", ["Rosmarin", "Thymian", "Salbei"], [], 0.1),
-        ("Salbei", "Heilkräuter", "Trocken bis mäßig", ["Rosmarin", "Thymian", "Lavendel"], ["Basilikum", "Gurke"], 0.3),
-        ("Thymian", "Heilkräuter", "Trocken halten", ["Rosmarin", "Lavendel", "Salbei"], [], 0.2),
-        ("Rosmarin", "Heilkräuter", "Trocken halten", ["Thymian", "Lavendel", "Salbei", "Bohnen"], ["Gurke"], 0.2),
-        ("Minze", "Heilkräuter", "Feucht halten", ["Tomaten", "Lattich"], ["Kamille", "Chamisso"], 1.0),
-        ("Echinacea", "Heilkräuter", "Mäßig feucht", ["Ringelblume", "Sonnenblume"], [], 0.1),
-        ("Arnikablume", "Heilkräuter", "Mäßig feucht", ["Sonnenblume"], [], 0.1),
-        ("Melisse", "Heilkräuter", "Gleichmäßig feucht", ["Tomaten", "Bohnen"], ["Minze (Ausbreitung)"], 0.6),
-        ("Ysop", "Heilkräuter", "Trocken bis mäßig", ["Kohlsorten", "Salbei"], [], 0.2),
-        ("Pfefferminze", "Heilkräuter", "Feucht halten", ["Tomaten", "Lattich"], ["Kamille"], 1.0),
-        ("Johanniskraut", "Heilkräuter", "Mäßig feucht", ["Sonnenblume"], [], 0.1),
-        ("Frauenmantel", "Heilkräuter", "Gleichmäßig feucht", ["Kamille"], [], 0.2),
-        ("Beinwell", "Heilkräuter", "Feucht halten", ["Tomaten", "Bohnen"], [], 0.3),
-        ("Oregano", "Küchenkräuter", "Trocken bis mäßig", ["Tomaten", "Paprika", "Bohnen"], [], 0.4),
-        ("Majoran", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Paprika"], [], 0.4),
-        ("Pimenton", "Küchenkräuter", "Mäßig feucht", ["Basilikum"], [], 0.4),
-        ("Tomaten", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Petersilie", "Karotten", "Ringelblume"], ["Fenchel", "Kohlsorten"], 5.0),
-        ("Paprika", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Tomaten", "Oregano"], [], 3.0),
-        ("Chili", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Tomaten", "Petersilie"], [], 1.5),
-        ("Gurke", "Gemüse", "Regelmäßig feucht halten", ["Dill", "Erbsen", "Bohnen", "Sonnenblume"], ["Salbei", "Rosmarin", "Minze"], 4.0),
-        ("Zucchini", "Gemüse", "Regelmäßig feucht", ["Borretsch", "Bohnen", "Mais"], [], 4.5),
-        ("Kürbis", "Gemüse", "Regelmäßig feucht", ["Mais", "Bohnen", "Ringelblume"], [], 3.5),
-        ("Tomate", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Petersilie", "Karotten"], ["Fenchel", "Kohlsorten"], 5.0),
-        ("Erbsen", "Gemüse", "Gleichmäßig feucht", ["Karotten", "Radieschen", "Gurke", "Dill"], ["Zwiebeln", "Knoblauch"], 1.0),
-        ("Bohnen", "Gemüse", "Regelmäßig feucht", ["Gurke", "Kürbis", "Zucchini", "Salat"], ["Zwiebeln", "Knoblauch", "Fenchel"], 1.5),
-        ("Karotten", "Gemüse", "Gleichmäßig feucht", ["Tomaten", "Erbsen", "Radieschen", "Schnittlauch"], ["Dill"], 3.0),
-        ("Radieschen", "Gemüse", "Gleichmäßig feucht", ["Erbsen", "Karotten", "Salat", "Spinat"], [], 1.5),
-        ("Spinat", "Gemüse", "Gleichmäßig feucht", ["Erbsen", "Radieschen", "Kohlsorten"], [], 1.0),
-        ("Salat", "Gemüse", "Gleichmäßig feucht", ["Bohnen", "Karotten", "Radieschen"], [], 2.0),
-        ("Kohlsorten", "Gemüse", "Regelmäßig feucht", ["Dill", "Salbei", "Spinat", "Ringelblume"], ["Tomaten", "Erbsen", "Bohnen"], 3.0),
-        ("Zwiebeln", "Gemüse", "Mäßig feucht", ["Karotten", "Salat", "Tomaten"], ["Erbsen", "Bohnen"], 2.5),
-        ("Knoblauch", "Gemüse", "Mäßig feucht", ["Tomaten", "Paprika", "Rosmarin"], ["Erbsen", "Bohnen"], 0.8),
-        ("Fenchel", "Gemüse", "Gleichmäßig feucht", ["Koriander"], ["Tomaten", "Bohnen", "Kohlsorten"], 1.5),
-        ("Sonnenblume", "Blumen", "Mäßig feucht", ["Gurke", "Kürbis", "Ringelblume"], [], 0.3),
-        ("Tagetes", "Blumen", "Mäßig feucht", ["Tomaten", "Bohnen"], [], 0.1),
-        ("Lattich", "Blumen", "Gleichmäßig feucht", ["Minze", "Pfefferminze"], [], 1.5),
+        ("Basilikum", "Küchenkräuter", "Regelmäßig feucht halten", ["Tomaten", "Paprika", "Chili"], ["Salbei", "Rauten"], 0.8, 15.0),
+        ("Petersilie", "Küchenkräuter", "Gleichmäßig feucht", ["Tomaten", "Chili", "Spargel"], [], 0.6, 10.0),
+        ("Dill", "Küchenkräuter", "Gleichmäßig feucht", ["Gurke", "Kohlsorten", "Zwiebeln"], ["Karotten"], 0.5, 10.0),
+        ("Schnittlauch", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Karotten"], [], 0.5, 12.0),
+        ("Koriander", "Küchenkräuter", "Regelmäßig feucht", ["Spinat", "Kohlsorten"], ["Fenchel"], 0.4, 8.0),
+        ("Kerbel", "Küchenkräuter", "Gleichmäßig feucht", ["Erbsen", "Tomaten"], [], 0.3, 10.0),
+        ("Liebstöckel", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Paprika", "Karotten"], [], 0.5, 8.0),
+        ("Borretsch", "Küchenkräuter", "Regelmäßig feucht", ["Tomaten", "Bohnen", "Zucchini"], [], 0.3, 10.0),
+        ("Ringelblume", "Heilkräuter", "Mäßig feucht", ["Tomaten", "Bohnen"], [], 0.2, 20.0),
+        ("Kamille", "Heilkräuter", "Trocken bis mäßig", ["Lavendel", "Thymian"], ["Minze"], 0.1, 25.0),
+        ("Lavendel", "Heilkräuter", "Trocken halten", ["Rosmarin", "Thymian", "Salbei"], [], 0.1, 30.0),
+        ("Salbei", "Heilkräuter", "Trocken bis mäßig", ["Rosmarin", "Thymian", "Lavendel"], ["Basilikum", "Gurke"], 0.3, 12.0),
+        ("Thymian", "Heilkräuter", "Trocken halten", ["Rosmarin", "Lavendel", "Salbei"], [], 0.2, 12.0),
+        ("Rosmarin", "Heilkräuter", "Trocken halten", ["Thymian", "Lavendel", "Salbei", "Bohnen"], ["Gurke"], 0.2, 12.0),
+        ("Minze", "Heilkräuter", "Feucht halten", ["Tomaten", "Lattich"], ["Kamille", "Chamisso"], 1.0, 10.0),
+        ("Echinacea", "Heilkräuter", "Mäßig feucht", ["Ringelblume", "Sonnenblume"], [], 0.1, 30.0),
+        ("Arnikablume", "Heilkräuter", "Mäßig feucht", ["Sonnenblume"], [], 0.1, 25.0),
+        ("Melisse", "Heilkräuter", "Gleichmäßig feucht", ["Tomaten", "Bohnen"], ["Minze (Ausbreitung)"], 0.6, 12.0),
+        ("Ysop", "Heilkräuter", "Trocken bis mäßig", ["Kohlsorten", "Salbei"], [], 0.2, 10.0),
+        ("Pfefferminze", "Heilkräuter", "Feucht halten", ["Tomaten", "Lattich"], ["Kamille"], 1.0, 10.0),
+        ("Johanniskraut", "Heilkräuter", "Mäßig feucht", ["Sonnenblume"], [], 0.1, 20.0),
+        ("Frauenmantel", "Heilkräuter", "Gleichmäßig feucht", ["Kamille"], [], 0.2, 8.0),
+        ("Beinwell", "Heilkräuter", "Feucht halten", ["Tomaten", "Bohnen"], [], 0.3, 15.0),
+        ("Oregano", "Küchenkräuter", "Trocken bis mäßig", ["Tomaten", "Paprika", "Bohnen"], [], 0.4, 12.0),
+        ("Majoran", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Paprika"], [], 0.4, 12.0),
+        ("Pimenton", "Küchenkräuter", "Mäßig feucht", ["Basilikum"], [], 0.4, 12.0),
+        ("Tomaten", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Petersilie", "Karotten", "Ringelblume"], ["Fenchel", "Kohlsorten"], 5.0, 3.5),
+        ("Paprika", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Tomaten", "Oregano"], [], 3.0, 4.0),
+        ("Chili", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Tomaten", "Petersilie"], [], 1.5, 8.0),
+        ("Gurke", "Gemüse", "Regelmäßig feucht halten", ["Dill", "Erbsen", "Bohnen", "Sonnenblume"], ["Salbei", "Rosmarin", "Minze"], 4.0, 2.5),
+        ("Zucchini", "Gemüse", "Regelmäßig feucht", ["Borretsch", "Bohnen", "Mais"], [], 4.5, 2.5),
+        ("Kürbis", "Gemüse", "Regelmäßig feucht", ["Mais", "Bohnen", "Ringelblume"], [], 3.5, 2.0),
+        ("Tomate", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Petersilie", "Karotten"], ["Fenchel", "Kohlsorten"], 5.0, 3.5),
+        ("Erbsen", "Gemüse", "Gleichmäßig feucht", ["Karotten", "Radieschen", "Gurke", "Dill"], ["Zwiebeln", "Knoblauch"], 1.0, 4.0),
+        ("Bohnen", "Gemüse", "Regelmäßig feucht", ["Gurke", "Kürbis", "Zucchini", "Salat"], ["Zwiebeln", "Knoblauch", "Fenchel"], 1.5, 4.0),
+        ("Karotten", "Gemüse", "Gleichmäßig feucht", ["Tomaten", "Erbsen", "Radieschen", "Schnittlauch"], ["Dill"], 3.0, 2.5),
+        ("Radieschen", "Gemüse", "Gleichmäßig feucht", ["Erbsen", "Karotten", "Salat", "Spinat"], [], 1.5, 5.0),
+        ("Spinat", "Gemüse", "Gleichmäßig feucht", ["Erbsen", "Radieschen", "Kohlsorten"], [], 1.0, 3.0),
+        ("Salat", "Gemüse", "Gleichmäßig feucht", ["Bohnen", "Karotten", "Radieschen"], [], 2.0, 3.0),
+        ("Kohlsorten", "Gemüse", "Regelmäßig feucht", ["Dill", "Salbei", "Spinat", "Ringelblume"], ["Tomaten", "Erbsen", "Bohnen"], 3.0, 2.5),
+        ("Zwiebeln", "Gemüse", "Mäßig feucht", ["Karotten", "Salat", "Tomaten"], ["Erbsen", "Bohnen"], 2.5, 1.5),
+        ("Knoblauch", "Gemüse", "Mäßig feucht", ["Tomaten", "Paprika", "Rosmarin"], ["Erbsen", "Bohnen"], 0.8, 8.0),
+        ("Fenchel", "Gemüse", "Gleichmäßig feucht", ["Koriander"], ["Tomaten", "Bohnen", "Kohlsorten"], 1.5, 3.0),
+        ("Sonnenblume", "Blumen", "Mäßig feucht", ["Gurke", "Kürbis", "Ringelblume"], [], 0.3, 5.0),
+        ("Tagetes", "Blumen", "Mäßig feucht", ["Tomaten", "Bohnen"], [], 0.1, 5.0),
+        ("Lattich", "Blumen", "Gleichmäßig feucht", ["Minze", "Pfefferminze"], [], 1.5, 3.0),
     ]
-    for name, cat, water, comp, incomp, ykg in plants:
+    for name, cat, water, comp, incomp, ykg, ppk in plants:
         conn.execute(
-            _sql("INSERT INTO plant_catalog (name, category, watering, companions, incompatible, yield_kg) VALUES (%s, %s, %s, %s, %s, %s)"),
-            (name, cat, water, json.dumps(comp, ensure_ascii=False), json.dumps(incomp, ensure_ascii=False), ykg),
+            _sql("INSERT INTO plant_catalog (name, category, watering, companions, incompatible, yield_kg, price_per_kg) VALUES (%s, %s, %s, %s, %s, %s, %s)"),
+            (name, cat, water, json.dumps(comp, ensure_ascii=False), json.dumps(incomp, ensure_ascii=False), ykg, ppk),
         )
     conn.commit()
 

@@ -1658,7 +1658,7 @@ def admin_update_plant_catalog_entry(entry_id):
         return err("Eintrag nicht gefunden.", 404)
     data = request.get_json(silent=True) or {}
     fields = {}
-    for key in ("name", "category", "watering", "yield_kg"):
+    for key in ("name", "category", "watering", "yield_kg", "price_per_kg"):
         if key in data:
             fields[key] = data[key]
     for key in ("companions", "incompatible"):

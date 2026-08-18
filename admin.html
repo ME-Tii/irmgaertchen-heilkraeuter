@@ -395,6 +395,9 @@
                     <button class="btn btn-sm btn-outline-secondary" type="button" id="plantCatalogRefresh" title="Aktualisieren"><i class="bi bi-arrow-clockwise"></i></button>
                   </div>
                 </div>
+                <div class="px-3 pt-2 pb-1">
+                  <input type="text" class="form-control form-control-sm" id="plantCatalogSearch" placeholder="Suchen...">
+                </div>
                 <div class="card-body p-0" id="fieldPlantCatalogBody" style="max-height:300px;overflow-y:auto;">
                   <p class="text-muted small mb-0 p-3">Lade...</p>
                 </div>
@@ -595,6 +598,10 @@
           <div class="mb-2">
             <label class="form-label small">Ertrag (kg/m²)</label>
             <input type="number" class="form-control form-control-sm" id="pcYield" min="0" step="0.1" placeholder="z.B. 5.0">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Preis pro kg (€)</label>
+            <input type="number" class="form-control form-control-sm" id="pcPrice" min="0" step="0.1" placeholder="z.B. 3.50">
           </div>
           <div class="mb-2">
             <label class="form-label small">Begleitpflanzen (kommagetrennt)</label>

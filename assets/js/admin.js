@@ -702,7 +702,7 @@ function renderPlanSummary() {
       if (dims) {
         var kg = ykg * parseFloat(dims.area);
         totalYield += kg;
-        var price = PRICE_PER_KG[s.plant_name];
+        var price = getPriceForPlant(s.plant_name);
         if (price) totalProfit += kg * price;
       }
     }
@@ -914,43 +914,60 @@ function loadPlantCatalogForAdmin() {
   adminApi("api/admin/plant-catalog")
     .then(function(data) {
       var plants = data.plants || [];
-      if (plants.length === 0) {
-        el.innerHTML = '<p class="text-muted small mb-0 p-3">Keine Pflanzen im Katalog.</p>';
-        return;
+      window._lastPlantCatalog = plants;
+      renderPlantCatalogList(plants);
+      var searchEl = document.getElementById("plantCatalogSearch");
+      if (searchEl && !searchEl._bound) {
+        searchEl._bound = true;
+        searchEl.addEventListener("input", function() {
+          var q = searchEl.value.toLowerCase();
+          var filtered = plants.filter(function(p) { return p.name.toLowerCase().indexOf(q) !== -1 || p.category.toLowerCase().indexOf(q) !== -1; });
+          renderPlantCatalogList(filtered);
+        });
       }
-      var cats = {};
-      plants.forEach(function(p) {
-        if (!cats[p.category]) cats[p.category] = [];
-        cats[p.category].push(p);
-      });
-      var html = '';
-      Object.keys(cats).sort().forEach(function(cat) {
-        html += '<div class="px-3 pt-2 pb-1 fw-bold small text-muted">' + esc(cat) + '</div>';
-        cats[cat].forEach(function(p) {
-          html += '<div class="d-flex align-items-center justify-content-between px-3 py-1 border-bottom">';
-          html += '<div class="small"><strong>' + esc(p.name) + '</strong>';
-          if (p.yield_kg) html += ' <span class="text-muted">~' + p.yield_kg + ' kg/m²</span>';
-          html += '</div>';
-          html += '<div class="d-flex gap-1">';
-          html += '<button class="btn btn-sm p-0 border-0 text-irm plant-cat-edit" data-id="' + p.id + '" title="Bearbeiten"><i class="bi bi-pencil"></i></button>';
-          html += '<button class="btn btn-sm p-0 border-0 text-danger plant-cat-delete" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Löschen"><i class="bi bi-trash"></i></button>';
-          html += '</div></div>';
-        });
-      });
-      el.innerHTML = html;
-      el.querySelectorAll(".plant-cat-edit").forEach(function(btn) {
-        btn.addEventListener("click", function() { openPlantCatalogModal(parseInt(btn.dataset.id)); });
-      });
-      el.querySelectorAll(".plant-cat-delete").forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          if (!confirm('Pflanze "' + btn.dataset.name + '" wirklich löschen?')) return;
-          adminApi("api/admin/plant-catalog/" + btn.dataset.id, "DELETE")
-            .then(function() { showToast("Gelöscht."); loadPlantCatalogForAdmin(); loadPlantCatalog(); })
-            .catch(function(err) { showToast(err.message); });
-        });
-      });
     })
     .catch(function(err) { el.innerHTML = '<p class="text-danger small mb-0 p-3">' + esc(err.message) + '</p>'; });
+}
+
+function renderPlantCatalogList(plants) {
+  var el = document.getElementById("fieldPlantCatalogBody");
+  if (!el) return;
+  if (plants.length === 0) {
+    el.innerHTML = '<p class="text-muted small mb-0 p-3">Keine Pflanzen gefunden.</p>';
+    return;
+  }
+  var cats = {};
+  plants.forEach(function(p) {
+    if (!cats[p.category]) cats[p.category] = [];
+    cats[p.category].push(p);
+  });
+  var html = '';
+  Object.keys(cats).sort().forEach(function(cat) {
+    html += '<div class="px-3 pt-2 pb-1 fw-bold small text-muted">' + esc(cat) + '</div>';
+    cats[cat].forEach(function(p) {
+      html += '<div class="d-flex align-items-center justify-content-between px-3 py-1 border-bottom">';
+      html += '<div class="small"><strong>' + esc(p.name) + '</strong>';
+      if (p.yield_kg) html += ' <span class="text-muted">~' + p.yield_kg + ' kg/m²</span>';
+      if (p.price_per_kg) html += ' <span class="text-muted">' + p.price_per_kg + ' €/kg</span>';
+      html += '</div>';
+      html += '<div class="d-flex gap-1">';
+      html += '<button class="btn btn-sm p-0 border-0 text-irm plant-cat-edit" data-id="' + p.id + '" title="Bearbeiten"><i class="bi bi-pencil"></i></button>';
+      html += '<button class="btn btn-sm p-0 border-0 text-danger plant-cat-delete" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Löschen"><i class="bi bi-trash"></i></button>';
+      html += '</div></div>';
+    });
+  });
+  el.innerHTML = html;
+  el.querySelectorAll(".plant-cat-edit").forEach(function(btn) {
+    btn.addEventListener("click", function() { openPlantCatalogModal(parseInt(btn.dataset.id)); });
+  });
+  el.querySelectorAll(".plant-cat-delete").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      if (!confirm('Pflanze "' + btn.dataset.name + '" wirklich löschen?')) return;
+      adminApi("api/admin/plant-catalog/" + btn.dataset.id, "DELETE")
+        .then(function() { showToast("Gelöscht."); loadPlantCatalogForAdmin(); loadPlantCatalog(); })
+        .catch(function(err) { showToast(err.message); });
+    });
+  });
 }
 
 function openPlantCatalogModal(entryId) {
@@ -964,6 +981,7 @@ function openPlantCatalogModal(entryId) {
     document.getElementById("pcCategory").value = entry ? entry.category : "Küchenkräuter";
     document.getElementById("pcWatering").value = entry ? entry.watering : "";
     document.getElementById("pcYield").value = entry ? (entry.yield_kg || "") : "";
+    document.getElementById("pcPrice").value = entry ? (entry.price_per_kg || "") : "";
     document.getElementById("pcCompanions").value = entry ? (entry.companions || []).join(", ") : "";
     document.getElementById("pcIncompatible").value = entry ? (entry.incompatible || []).join(", ") : "";
     document.getElementById("pcEntryId").value = entryId || "";
@@ -983,6 +1001,7 @@ function savePlantCatalogEntry() {
     category: document.getElementById("pcCategory").value.trim(),
     watering: document.getElementById("pcWatering").value.trim(),
     yield_kg: parseFloat(document.getElementById("pcYield").value) || null,
+    price_per_kg: parseFloat(document.getElementById("pcPrice").value) || null,
     companions: document.getElementById("pcCompanions").value.split(",").map(function(s) { return s.trim(); }).filter(Boolean),
     incompatible: document.getElementById("pcIncompatible").value.split(",").map(function(s) { return s.trim(); }).filter(Boolean),
   };
@@ -1633,6 +1652,12 @@ function getCatalogForDatalist() {
   var db = window.PLANT_CATALOG_DB || [];
   if (db.length > 0) return db;
   return PLANT_CATALOG;
+}
+
+function getPriceForPlant(name) {
+  var db = (window.PLANT_CATALOG_DB || []).find(function(c) { return c.name === name; });
+  if (db && db.price_per_kg) return db.price_per_kg;
+  return PRICE_PER_KG[name] || 0;
 }
 
 let fpState = {
@@ -2577,7 +2602,7 @@ function showSectionPanel(section) {
       '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
       (YIELD_KG_PER_M2[section.plant_name] ?
         '<div class="col-6"><span class="small text-muted d-block">Ertrag</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * parseFloat(dims.area)).toFixed(1) + ' kg</strong></div>' +
-        (PRICE_PER_KG[section.plant_name] ? '<div class="col-6"><span class="small text-muted d-block">Umsatz</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * PRICE_PER_KG[section.plant_name] * parseFloat(dims.area)).toFixed(0) + ' €</strong></div>' : '')
+        (getPriceForPlant(section.plant_name) ? '<div class="col-6"><span class="small text-muted d-block">Umsatz</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * getPriceForPlant(section.plant_name) * parseFloat(dims.area)).toFixed(0) + ' €</strong></div>' : '')
         : '') +
       '</div>'
     : '';
