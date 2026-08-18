@@ -187,6 +187,17 @@ SQLITE_SCHEMA = [
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS plant_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
+        watering TEXT NOT NULL DEFAULT '',
+        companions TEXT NOT NULL DEFAULT '[]',
+        incompatible TEXT NOT NULL DEFAULT '[]',
+        yield_kg REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -335,6 +346,17 @@ PG_SCHEMA = [
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
+    """CREATE TABLE IF NOT EXISTS plant_catalog (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
+        watering TEXT NOT NULL DEFAULT '',
+        companions TEXT NOT NULL DEFAULT '[]',
+        incompatible TEXT NOT NULL DEFAULT '[]',
+        yield_kg REAL,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
 ]
 
 SCHEMA = PG_SCHEMA if USE_PG else SQLITE_SCHEMA
@@ -431,6 +453,8 @@ def init_db():
         )
     conn.commit()
     seed_products(conn)
+    conn.commit()
+    seed_plant_catalog(conn)
     conn.commit()
     conn.close()
 
@@ -1131,6 +1155,126 @@ def delete_field_section(section_id):
     conn.execute(_sql("DELETE FROM field_sections WHERE id = %s"), (section_id,))
     conn.commit()
     conn.close()
+
+
+# ---- Plant Catalog ----
+
+def list_plant_catalog():
+    conn = get_conn()
+    rows = conn.execute(_sql("SELECT * FROM plant_catalog ORDER BY category, name")).fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def get_plant_catalog_entry(entry_id):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM plant_catalog WHERE id = %s"), (entry_id,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def create_plant_catalog_entry(data):
+    conn = get_conn()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    cur = conn.execute(
+        _sql(
+            "INSERT INTO plant_catalog (name, category, watering, companions, incompatible, yield_kg, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)" + _ret_id()
+        ),
+        (
+            data.get("name", ""),
+            data.get("category", ""),
+            data.get("watering", ""),
+            json.dumps(data.get("companions", []), ensure_ascii=False),
+            json.dumps(data.get("incompatible", []), ensure_ascii=False),
+            data.get("yield_kg"),
+            now,
+            now,
+        ),
+    )
+    entry_id = _insert_id(cur)
+    conn.commit()
+    conn.close()
+    return entry_id
+
+
+def update_plant_catalog_entry(entry_id, fields):
+    if not fields:
+        return
+    conn = get_conn()
+    fields["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    keys = list(fields.keys())
+    set_clause = ", ".join(f"{k} = %s" for k in keys)
+    conn.execute(_sql(f"UPDATE plant_catalog SET {set_clause} WHERE id = %s"), (*fields.values(), entry_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_plant_catalog_entry(entry_id):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM plant_catalog WHERE id = %s"), (entry_id,))
+    conn.commit()
+    conn.close()
+
+
+def seed_plant_catalog(conn):
+    cur = conn.execute("SELECT COUNT(*) AS c FROM plant_catalog")
+    if cur.fetchone()["c"] > 0:
+        return
+    plants = [
+        ("Basilikum", "Küchenkräuter", "Regelmäßig feucht halten", ["Tomaten", "Paprika", "Chili"], ["Salbei", "Rauten"], 0.8),
+        ("Petersilie", "Küchenkräuter", "Gleichmäßig feucht", ["Tomaten", "Chili", "Spargel"], [], 0.6),
+        ("Dill", "Küchenkräuter", "Gleichmäßig feucht", ["Gurke", "Kohlsorten", "Zwiebeln"], ["Karotten"], 0.5),
+        ("Schnittlauch", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Karotten"], [], 0.5),
+        ("Koriander", "Küchenkräuter", "Regelmäßig feucht", ["Spinat", "Kohlsorten"], ["Fenchel"], 0.4),
+        ("Kerbel", "Küchenkräuter", "Gleichmäßig feucht", ["Erbsen", "Tomaten"], [], 0.3),
+        ("Liebstöckel", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Paprika", "Karotten"], [], 0.5),
+        ("Borretsch", "Küchenkräuter", "Regelmäßig feucht", ["Tomaten", "Bohnen", "Zucchini"], [], 0.3),
+        ("Ringelblume", "Heilkräuter", "Mäßig feucht", ["Tomaten", "Bohnen"], [], 0.2),
+        ("Kamille", "Heilkräuter", "Trocken bis mäßig", ["Lavendel", "Thymian"], ["Minze"], 0.1),
+        ("Lavendel", "Heilkräuter", "Trocken halten", ["Rosmarin", "Thymian", "Salbei"], [], 0.1),
+        ("Salbei", "Heilkräuter", "Trocken bis mäßig", ["Rosmarin", "Thymian", "Lavendel"], ["Basilikum", "Gurke"], 0.3),
+        ("Thymian", "Heilkräuter", "Trocken halten", ["Rosmarin", "Lavendel", "Salbei"], [], 0.2),
+        ("Rosmarin", "Heilkräuter", "Trocken halten", ["Thymian", "Lavendel", "Salbei", "Bohnen"], ["Gurke"], 0.2),
+        ("Minze", "Heilkräuter", "Feucht halten", ["Tomaten", "Lattich"], ["Kamille", "Chamisso"], 1.0),
+        ("Echinacea", "Heilkräuter", "Mäßig feucht", ["Ringelblume", "Sonnenblume"], [], 0.1),
+        ("Arnikablume", "Heilkräuter", "Mäßig feucht", ["Sonnenblume"], [], 0.1),
+        ("Melisse", "Heilkräuter", "Gleichmäßig feucht", ["Tomaten", "Bohnen"], ["Minze (Ausbreitung)"], 0.6),
+        ("Ysop", "Heilkräuter", "Trocken bis mäßig", ["Kohlsorten", "Salbei"], [], 0.2),
+        ("Pfefferminze", "Heilkräuter", "Feucht halten", ["Tomaten", "Lattich"], ["Kamille"], 1.0),
+        ("Johanniskraut", "Heilkräuter", "Mäßig feucht", ["Sonnenblume"], [], 0.1),
+        ("Frauenmantel", "Heilkräuter", "Gleichmäßig feucht", ["Kamille"], [], 0.2),
+        ("Beinwell", "Heilkräuter", "Feucht halten", ["Tomaten", "Bohnen"], [], 0.3),
+        ("Oregano", "Küchenkräuter", "Trocken bis mäßig", ["Tomaten", "Paprika", "Bohnen"], [], 0.4),
+        ("Majoran", "Küchenkräuter", "Mäßig feucht", ["Tomaten", "Paprika"], [], 0.4),
+        ("Pimenton", "Küchenkräuter", "Mäßig feucht", ["Basilikum"], [], 0.4),
+        ("Tomaten", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Petersilie", "Karotten", "Ringelblume"], ["Fenchel", "Kohlsorten"], 5.0),
+        ("Paprika", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Tomaten", "Oregano"], [], 3.0),
+        ("Chili", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Tomaten", "Petersilie"], [], 1.5),
+        ("Gurke", "Gemüse", "Regelmäßig feucht halten", ["Dill", "Erbsen", "Bohnen", "Sonnenblume"], ["Salbei", "Rosmarin", "Minze"], 4.0),
+        ("Zucchini", "Gemüse", "Regelmäßig feucht", ["Borretsch", "Bohnen", "Mais"], [], 4.5),
+        ("Kürbis", "Gemüse", "Regelmäßig feucht", ["Mais", "Bohnen", "Ringelblume"], [], 3.5),
+        ("Tomate", "Gemüse", "Regelmäßig feucht", ["Basilikum", "Petersilie", "Karotten"], ["Fenchel", "Kohlsorten"], 5.0),
+        ("Erbsen", "Gemüse", "Gleichmäßig feucht", ["Karotten", "Radieschen", "Gurke", "Dill"], ["Zwiebeln", "Knoblauch"], 1.0),
+        ("Bohnen", "Gemüse", "Regelmäßig feucht", ["Gurke", "Kürbis", "Zucchini", "Salat"], ["Zwiebeln", "Knoblauch", "Fenchel"], 1.5),
+        ("Karotten", "Gemüse", "Gleichmäßig feucht", ["Tomaten", "Erbsen", "Radieschen", "Schnittlauch"], ["Dill"], 3.0),
+        ("Radieschen", "Gemüse", "Gleichmäßig feucht", ["Erbsen", "Karotten", "Salat", "Spinat"], [], 1.5),
+        ("Spinat", "Gemüse", "Gleichmäßig feucht", ["Erbsen", "Radieschen", "Kohlsorten"], [], 1.0),
+        ("Salat", "Gemüse", "Gleichmäßig feucht", ["Bohnen", "Karotten", "Radieschen"], [], 2.0),
+        ("Kohlsorten", "Gemüse", "Regelmäßig feucht", ["Dill", "Salbei", "Spinat", "Ringelblume"], ["Tomaten", "Erbsen", "Bohnen"], 3.0),
+        ("Zwiebeln", "Gemüse", "Mäßig feucht", ["Karotten", "Salat", "Tomaten"], ["Erbsen", "Bohnen"], 2.5),
+        ("Knoblauch", "Gemüse", "Mäßig feucht", ["Tomaten", "Paprika", "Rosmarin"], ["Erbsen", "Bohnen"], 0.8),
+        ("Fenchel", "Gemüse", "Gleichmäßig feucht", ["Koriander"], ["Tomaten", "Bohnen", "Kohlsorten"], 1.5),
+        ("Sonnenblume", "Blumen", "Mäßig feucht", ["Gurke", "Kürbis", "Ringelblume"], [], 0.3),
+        ("Tagetes", "Blumen", "Mäßig feucht", ["Tomaten", "Bohnen"], [], 0.1),
+        ("Lattich", "Blumen", "Gleichmäßig feucht", ["Minze", "Pfefferminze"], [], 1.5),
+    ]
+    for name, cat, water, comp, incomp, ykg in plants:
+        conn.execute(
+            _sql("INSERT INTO plant_catalog (name, category, watering, companions, incompatible, yield_kg) VALUES (%s, %s, %s, %s, %s, %s)"),
+            (name, cat, water, json.dumps(comp, ensure_ascii=False), json.dumps(incomp, ensure_ascii=False), ykg),
+        )
+    conn.commit()
 
 
 # ---- Backup / Restore ----

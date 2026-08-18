@@ -1601,6 +1601,83 @@ def admin_water_field_section(plan_id, section_id):
 
 # ---------------------------------------------------------------- backup
 
+@app.get("/api/admin/plant-catalog")
+def admin_list_plant_catalog():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    entries = db.list_plant_catalog()
+    for e in entries:
+        e["companions"] = json.loads(e.get("companions") or "[]")
+        e["incompatible"] = json.loads(e.get("incompatible") or "[]")
+    return jsonify({"plants": entries})
+
+
+@app.get("/api/field-plans/plant-catalog")
+def public_plant_catalog():
+    entries = db.list_plant_catalog()
+    for e in entries:
+        e["companions"] = json.loads(e.get("companions") or "[]")
+        e["incompatible"] = json.loads(e.get("incompatible") or "[]")
+    return jsonify({"plants": entries})
+
+
+@app.post("/api/admin/plant-catalog")
+def admin_create_plant_catalog_entry():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    name = _clean_text(data.get("name"), 100)
+    if not name:
+        return err("Name ist erforderlich.", 400)
+    entry_id = db.create_plant_catalog_entry(data)
+    return jsonify({"ok": True, "id": entry_id})
+
+
+@app.get("/api/admin/plant-catalog/<int:entry_id>")
+def admin_get_plant_catalog_entry(entry_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    entry = db.get_plant_catalog_entry(entry_id)
+    if not entry:
+        return err("Eintrag nicht gefunden.", 404)
+    entry["companions"] = json.loads(entry.get("companions") or "[]")
+    entry["incompatible"] = json.loads(entry.get("incompatible") or "[]")
+    return jsonify({"plant": entry})
+
+
+@app.put("/api/admin/plant-catalog/<int:entry_id>")
+def admin_update_plant_catalog_entry(entry_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    entry = db.get_plant_catalog_entry(entry_id)
+    if not entry:
+        return err("Eintrag nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    for key in ("name", "category", "watering", "yield_kg"):
+        if key in data:
+            fields[key] = data[key]
+    for key in ("companions", "incompatible"):
+        if key in data:
+            fields[key] = json.dumps(data[key], ensure_ascii=False)
+    if fields:
+        db.update_plant_catalog_entry(entry_id, fields)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/plant-catalog/<int:entry_id>")
+def admin_delete_plant_catalog_entry(entry_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    db.delete_plant_catalog_entry(entry_id)
+    return jsonify({"ok": True})
+
+
 @app.get("/api/admin/backup")
 def admin_backup():
     bad = _admin_ok(require_admin())

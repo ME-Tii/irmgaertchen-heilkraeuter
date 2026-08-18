@@ -692,7 +692,16 @@ function renderPlanSummary() {
     return;
   }
   let html = '<span class="me-3"><i class="bi bi-grid-3x3"></i> ' + count + ' Bereich' + (count !== 1 ? "e" : "") + '</span>';
-  if (total) html += '<span><i class="bi bi-aspect-ratio"></i> Gesamtfläche: ' + total.toFixed(2) + ' m²</span>';
+  if (total) html += '<span class="me-3"><i class="bi bi-aspect-ratio"></i> Gesamtfläche: ' + total.toFixed(2) + ' m²</span>';
+  let totalYield = 0;
+  fpState.sections.forEach(function(s) {
+    var ykg = YIELD_KG_PER_M2[s.plant_name];
+    if (ykg && s.points && s.points.length >= 3) {
+      var dims = computeSectionDims(s);
+      if (dims) totalYield += ykg * parseFloat(dims.area);
+    }
+  });
+  if (totalYield > 0) html += '<span><i class="bi bi-basket"></i> Geschätzter Ertrag: ~' + totalYield.toFixed(1) + ' kg</span>';
   el.innerHTML = html;
 }
 
@@ -700,11 +709,11 @@ function renderPlanSummary() {
 
 function drawIncompatibleLines(ctx, w, h) {
   fpState.sections.forEach(function(s1) {
-    const e1 = PLANT_CATALOG.find(function(c) { return c.name === (s1.plant_name || ""); });
+    const e1 = getCatalogForDatalist().find(function(c) { return c.name === (s1.plant_name || ""); });
     if (!e1) return;
     fpState.sections.forEach(function(s2) {
       if (s2.id <= s1.id) return;
-      const e2 = PLANT_CATALOG.find(function(c) { return c.name === (s2.plant_name || ""); });
+      const e2 = getCatalogForDatalist().find(function(c) { return c.name === (s2.plant_name || ""); });
       if (!e2) return;
       if (e1.incompatible.indexOf(s2.plant_name) === -1 && e2.incompatible.indexOf(s1.plant_name) === -1) return;
       const pts1 = s1.points || [];
@@ -809,7 +818,7 @@ function getWateringFrequencyDays(section) {
   for (var key in WATERING_FREQ) {
     if (s.indexOf(key) !== -1) return WATERING_FREQ[key];
   }
-  var entry = PLANT_CATALOG.find(function(c) { return c.name === (section.plant_name || ""); });
+  var entry = getCatalogForDatalist().find(function(c) { return c.name === (section.plant_name || ""); });
   if (entry) {
     var ws = (entry.watering || "").toLowerCase();
     for (var k2 in WATERING_FREQ) {
@@ -887,6 +896,107 @@ function renderWateringCalendar() {
         .then(function() { renderWateringCalendar(); })
         .catch(function(err) { showToast(err.message); });
     });
+  });
+}
+
+// ---- Phase 6: Plant catalog management
+
+function loadPlantCatalogForAdmin() {
+  var el = document.getElementById("fieldPlantCatalogBody");
+  if (!el) return;
+  adminApi("api/admin/plant-catalog")
+    .then(function(data) {
+      var plants = data.plants || [];
+      if (plants.length === 0) {
+        el.innerHTML = '<p class="text-muted small mb-0 p-3">Keine Pflanzen im Katalog.</p>';
+        return;
+      }
+      var cats = {};
+      plants.forEach(function(p) {
+        if (!cats[p.category]) cats[p.category] = [];
+        cats[p.category].push(p);
+      });
+      var html = '';
+      Object.keys(cats).sort().forEach(function(cat) {
+        html += '<div class="px-3 pt-2 pb-1 fw-bold small text-muted">' + esc(cat) + '</div>';
+        cats[cat].forEach(function(p) {
+          html += '<div class="d-flex align-items-center justify-content-between px-3 py-1 border-bottom">';
+          html += '<div class="small"><strong>' + esc(p.name) + '</strong>';
+          if (p.yield_kg) html += ' <span class="text-muted">~' + p.yield_kg + ' kg/m²</span>';
+          html += '</div>';
+          html += '<div class="d-flex gap-1">';
+          html += '<button class="btn btn-sm p-0 border-0 text-irm plant-cat-edit" data-id="' + p.id + '" title="Bearbeiten"><i class="bi bi-pencil"></i></button>';
+          html += '<button class="btn btn-sm p-0 border-0 text-danger plant-cat-delete" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Löschen"><i class="bi bi-trash"></i></button>';
+          html += '</div></div>';
+        });
+      });
+      el.innerHTML = html;
+      el.querySelectorAll(".plant-cat-edit").forEach(function(btn) {
+        btn.addEventListener("click", function() { openPlantCatalogModal(parseInt(btn.dataset.id)); });
+      });
+      el.querySelectorAll(".plant-cat-delete").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          if (!confirm('Pflanze "' + btn.dataset.name + '" wirklich löschen?')) return;
+          adminApi("api/admin/plant-catalog/" + btn.dataset.id, "DELETE")
+            .then(function() { showToast("Gelöscht."); loadPlantCatalogForAdmin(); loadPlantCatalog(); })
+            .catch(function(err) { showToast(err.message); });
+        });
+      });
+    })
+    .catch(function(err) { el.innerHTML = '<p class="text-danger small mb-0 p-3">' + esc(err.message) + '</p>'; });
+}
+
+function openPlantCatalogModal(entryId) {
+  var isEdit = !!entryId;
+  var entry = null;
+  var doOpen = function(e) {
+    entry = e;
+    var title = document.getElementById("pcModalLabel");
+    if (title) title.textContent = isEdit ? "Pflanze bearbeiten" : "Pflanze hinzufügen";
+    document.getElementById("pcName").value = entry ? entry.name : "";
+    document.getElementById("pcCategory").value = entry ? entry.category : "Küchenkräuter";
+    document.getElementById("pcWatering").value = entry ? entry.watering : "";
+    document.getElementById("pcYield").value = entry ? (entry.yield_kg || "") : "";
+    document.getElementById("pcCompanions").value = entry ? (entry.companions || []).join(", ") : "";
+    document.getElementById("pcIncompatible").value = entry ? (entry.incompatible || []).join(", ") : "";
+    document.getElementById("pcEntryId").value = entryId || "";
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("plantCatalogModal")).show();
+  };
+  if (isEdit) {
+    adminApi("api/admin/plant-catalog/" + entryId).then(function(d) { doOpen(d.plant || d); });
+  } else {
+    doOpen(null);
+  }
+}
+
+function savePlantCatalogEntry() {
+  var entryId = document.getElementById("pcEntryId").value;
+  var data = {
+    name: document.getElementById("pcName").value.trim(),
+    category: document.getElementById("pcCategory").value.trim(),
+    watering: document.getElementById("pcWatering").value.trim(),
+    yield_kg: parseFloat(document.getElementById("pcYield").value) || null,
+    companions: document.getElementById("pcCompanions").value.split(",").map(function(s) { return s.trim(); }).filter(Boolean),
+    incompatible: document.getElementById("pcIncompatible").value.split(",").map(function(s) { return s.trim(); }).filter(Boolean),
+  };
+  if (!data.name) { showToast("Name ist erforderlich."); return; }
+  var url = entryId ? "api/admin/plant-catalog/" + entryId : "api/admin/plant-catalog";
+  var method = entryId ? "PUT" : "POST";
+  adminApi(url, method, data)
+    .then(function() {
+      bootstrap.Modal.getInstance(document.getElementById("plantCatalogModal")).hide();
+      showToast(entryId ? "Gespeichert." : "Hinzugefügt.");
+      loadPlantCatalogForAdmin();
+      loadPlantCatalog();
+    })
+    .catch(function(err) { showToast(err.message); });
+}
+
+function loadPlantCatalog() {
+  return fetch("/api/field-plans/plant-catalog").then(function(r) { return r.json(); }).then(function(data) {
+    window.PLANT_CATALOG_DB = data.plants || [];
+  }).catch(function() {
+    window.PLANT_CATALOG_DB = [];
   });
 }
 
@@ -1431,7 +1541,7 @@ const GROWTH_COLORS = {
   "Geerntet": "#6c757d",
 };
 
-const PLANT_CATALOG = [
+var PLANT_CATALOG = [
   { name: "Basilikum", category: "Küchenkräuter", watering: "Regelmäßig feucht halten", companions: ["Tomaten", "Paprika", "Chili"], incompatible: ["Salbei", "Rauten"] },
   { name: "Petersilie", category: "Küchenkräuter", watering: "Gleichmäßig feucht", companions: ["Tomaten", "Chili", "Spargel"], incompatible: [] },
   { name: "Dill", category: "Küchenkräuter", watering: "Gleichmäßig feucht", companions: ["Gurke", "Kohlsorten", "Zwiebeln"], incompatible: ["Karotten"] },
@@ -1480,6 +1590,28 @@ const PLANT_CATALOG = [
   { name: "Lattich", category: "Blumen", watering: "Gleichmäßig feucht", companions: ["Minze", "Pfefferminze"], incompatible: [] },
 ];
 
+var YIELD_KG_PER_M2 = {
+  "Basilikum": 0.8, "Petersilie": 0.6, "Dill": 0.5, "Schnittlauch": 0.5,
+  "Koriander": 0.4, "Kerbel": 0.3, "Liebstöckel": 0.5, "Borretsch": 0.3,
+  "Ringelblume": 0.2, "Kamille": 0.1, "Lavendel": 0.1, "Salbei": 0.3,
+  "Thymian": 0.2, "Rosmarin": 0.2, "Minze": 1.0, "Echinacea": 0.1,
+  "Arnikablume": 0.1, "Melisse": 0.6, "Ysop": 0.2, "Pfefferminze": 1.0,
+  "Johanniskraut": 0.1, "Frauenmantel": 0.2, "Beinwell": 0.3,
+  "Oregano": 0.4, "Majoran": 0.4, "Pimenton": 0.4,
+  "Tomaten": 5.0, "Paprika": 3.0, "Chili": 1.5, "Gurke": 4.0,
+  "Zucchini": 4.5, "Kürbis": 3.5, "Tomate": 5.0,
+  "Erbsen": 1.0, "Bohnen": 1.5, "Karotten": 3.0, "Radieschen": 1.5,
+  "Spinat": 1.0, "Salat": 2.0, "Kohlsorten": 3.0,
+  "Zwiebeln": 2.5, "Knoblauch": 0.8, "Fenchel": 1.5,
+  "Sonnenblume": 0.3, "Tagetes": 0.1, "Lattich": 1.5,
+};
+
+function getCatalogForDatalist() {
+  var db = window.PLANT_CATALOG_DB || [];
+  if (db.length > 0) return db;
+  return PLANT_CATALOG;
+}
+
 let fpState = {
   plan: null,
   sections: [],
@@ -1491,6 +1623,10 @@ let fpState = {
   image: null,
   colorIdx: 0,
   lastClickTime: 0,
+  clipboard: null,
+  dragging: false,
+  dragSectionId: null,
+  dragStart: null,
 };
 
 function loadFieldPlans() {
@@ -1599,6 +1735,46 @@ document.addEventListener("DOMContentLoaded", () => {
   if (fpWaterRefresh) {
     fpWaterRefresh.addEventListener("click", () => { renderWateringCalendar(); });
   }
+  const fpExportBtn = document.getElementById("fieldplanExportBtn");
+  if (fpExportBtn) {
+    fpExportBtn.addEventListener("click", () => { exportFieldPlanPNG(); });
+  }
+  const fpPasteBtn = document.getElementById("fieldplanPasteBtn");
+  if (fpPasteBtn) {
+    fpPasteBtn.addEventListener("click", () => {
+      if (!fpState.clipboard || !fpState.plan) return;
+      var src = fpState.clipboard;
+      var offset = 0.03;
+      var newPoints = (src.points || []).map(function(p) {
+        return { x: Math.min(1, p.x + offset), y: Math.min(1, p.y + offset) };
+      });
+      var payload = {
+        points: newPoints,
+        name: src.name || "",
+        plant_name: src.plant_name || "",
+        plant_variety: src.plant_variety || "",
+        planting_date: src.planting_date || null,
+        expected_harvest: src.expected_harvest || null,
+        growth_stage: src.growth_stage || "Saaten",
+        watering_interval: src.watering_interval || null,
+        watering_last: src.watering_last || null,
+        notes: src.notes || "",
+        color: src.color || "#3f6b3b",
+      };
+      adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections", "POST", payload)
+        .then(() => { showToast("Bereich eingefügt."); return reloadFieldPlan(); })
+        .catch(function(err) { showToast(err.message); });
+    });
+  }
+  const pcAddBtn = document.getElementById("plantCatalogAdd");
+  if (pcAddBtn) {
+    pcAddBtn.addEventListener("click", () => { openPlantCatalogModal(null); });
+  }
+  const pcRefreshBtn = document.getElementById("plantCatalogRefresh");
+  if (pcRefreshBtn) {
+    pcRefreshBtn.addEventListener("click", () => { loadPlantCatalogForAdmin(); });
+  }
+  loadPlantCatalog();
 });
 
 function openFieldPlanEditor(planId) {
@@ -1622,6 +1798,7 @@ function openFieldPlanEditor(planId) {
       renderTimeline();
       renderWateringCalendar();
       loadFieldImage();
+      loadPlantCatalogForAdmin();
     })
     .catch((err) => showToast(err.message));
 }
@@ -1689,6 +1866,8 @@ function setupCanvas() {
   canvas.onclick = onCanvasClick;
   canvas.ondblclick = onCanvasDblClick;
   canvas.onmousemove = onCanvasMouseMove;
+  canvas.onmousedown = onCanvasMouseDown;
+  canvas.onmouseup = onCanvasMouseUp;
   canvas.oncontextmenu = onCanvasContextMenu;
   canvas.style.cursor = fpState.drawing ? "crosshair" : "default";
   const cw = container.clientWidth || 800;
@@ -1929,6 +2108,53 @@ function computeSectionDims(section) {
   return { width: widthM.toFixed(2), height: heightM.toFixed(2), area: areaM2.toFixed(2) };
 }
 
+function exportFieldPlanPNG() {
+  const canvas = document.getElementById("fieldCanvas");
+  if (!canvas || !fpState.image) return;
+  const tmpCanvas = document.createElement("canvas");
+  tmpCanvas.width = canvas.width;
+  tmpCanvas.height = canvas.height;
+  const tmpCtx = tmpCanvas.getContext("2d");
+  tmpCtx.drawImage(fpState.image, 0, 0, canvas.width, canvas.height);
+  fpState.sections.forEach(function(s) {
+    const pts = s.points || [];
+    if (pts.length < 3) return;
+    tmpCtx.beginPath();
+    tmpCtx.moveTo(pts[0].x * canvas.width, pts[0].y * canvas.height);
+    for (var i = 1; i < pts.length; i++) tmpCtx.lineTo(pts[i].x * canvas.width, pts[i].y * canvas.height);
+    tmpCtx.closePath();
+    tmpCtx.fillStyle = hexToRGBA(s.color || "#3f6b3b", 0.3);
+    tmpCtx.fill();
+    tmpCtx.strokeStyle = s.color || "#3f6b3b";
+    tmpCtx.lineWidth = 2;
+    tmpCtx.stroke();
+    const cx = pts.reduce(function(sum, p) { return sum + p.x; }, 0) / pts.length * canvas.width;
+    const cy = pts.reduce(function(sum, p) { return sum + p.y; }, 0) / pts.length * canvas.height;
+    const label = s.plant_name || s.name || "";
+    if (!label) return;
+    tmpCtx.font = "bold 13px Inter, sans-serif";
+    var lines2 = [label];
+    var lineH = 18, totalH = lines2.length * lineH + 6, maxW = 0;
+    for (var li = 0; li < lines2.length; li++) maxW = Math.max(maxW, tmpCtx.measureText(lines2[li]).width + 10);
+    tmpCtx.fillStyle = "rgba(0,0,0,0.55)";
+    tmpCtx.fillRect(cx - maxW / 2, cy - totalH / 2, maxW, totalH);
+    tmpCtx.fillStyle = "#fff";
+    tmpCtx.textAlign = "center";
+    tmpCtx.textBaseline = "middle";
+    tmpCtx.fillText(label, cx, cy);
+  });
+  tmpCanvas.toBlob(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = (fpState.plan ? fpState.plan.name : "anbauplan") + ".png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, "image/png");
+}
+
 function hexToRGBA(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -2076,7 +2302,57 @@ function onCanvasContextMenu(e) {
   }
 }
 
+function onCanvasMouseDown(e) {
+  if (fpState.drawing || fpState.calibrating || e.button !== 0) return;
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+  for (let i = fpState.sections.length - 1; i >= 0; i--) {
+    if (pointInPolygon({ x, y }, fpState.sections[i].points || [])) {
+      fpState.dragging = true;
+      fpState.dragSectionId = fpState.sections[i].id;
+      fpState.dragStart = { x, y };
+      canvas.style.cursor = "grabbing";
+      e.preventDefault();
+      return;
+    }
+  }
+}
+
+function onCanvasMouseUp(e) {
+  if (!fpState.dragging) return;
+  fpState.dragging = false;
+  const canvas = e.target;
+  canvas.style.cursor = "default";
+  const section = fpState.sections.find(function(s) { return s.id === fpState.dragSectionId; });
+  if (section) {
+    adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + section.id, "PUT", { points: section.points })
+      .then(function() { return reloadFieldPlan(); })
+      .catch(function(err) { showToast(err.message); });
+  }
+  fpState.dragSectionId = null;
+  fpState.dragStart = null;
+}
+
 function onCanvasMouseMove(e) {
+  if (fpState.dragging) {
+    const canvas = e.target;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top) / rect.height;
+    const dx = mx - fpState.dragStart.x;
+    const dy = my - fpState.dragStart.y;
+    fpState.dragStart = { x: mx, y: my };
+    const section = fpState.sections.find(function(s) { return s.id === fpState.dragSectionId; });
+    if (section) {
+      section.points = (section.points || []).map(function(p) {
+        return { x: Math.max(0, Math.min(1, p.x + dx)), y: Math.max(0, Math.min(1, p.y + dy)) };
+      });
+      renderFieldCanvas();
+    }
+    return;
+  }
   if (!fpState.drawing) return;
   const canvas = e.target;
   const rect = canvas.getBoundingClientRect();
@@ -2209,18 +2485,20 @@ function showSectionPanel(section) {
   const dims = computeSectionDims(section);
   const dimsHtml = dims
     ? '<div class="row g-2 mb-2">' +
-      '<div class="col-4"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
-      '<div class="col-4"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
-      '<div class="col-4"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
-      '</div>'
+      '<div class="col-3"><span class="small text-muted d-block">Breite</span><strong>' + dims.width + ' m</strong></div>' +
+      '<div class="col-3"><span class="small text-muted d-block">Höhe</span><strong>' + dims.height + ' m</strong></div>' +
+      '<div class="col-3"><span class="small text-muted d-block">Fläche</span><strong>' + dims.area + ' m²</strong></div>' +
+      '<div class="col-3">' +
+      (YIELD_KG_PER_M2[section.plant_name] ? '<span class="small text-muted d-block">Ertrag</span><strong>~' + (YIELD_KG_PER_M2[section.plant_name] * parseFloat(dims.area)).toFixed(1) + ' kg</strong>' : '') +
+      '</div></div>'
     : '';
   let companionHtml = '';
-  const plantEntry = PLANT_CATALOG.find(function(c) { return c.name === (section.plant_name || ""); });
+  const plantEntry = getCatalogForDatalist().find(function(c) { return c.name === (section.plant_name || ""); });
   if (plantEntry) {
     const bad = [];
     fpState.sections.forEach(function(other) {
       if (other.id === section.id) return;
-      const otherEntry = PLANT_CATALOG.find(function(c) { return c.name === (other.plant_name || ""); });
+      const otherEntry = getCatalogForDatalist().find(function(c) { return c.name === (other.plant_name || ""); });
       if (!otherEntry) return;
       if (plantEntry.incompatible.indexOf(other.plant_name) !== -1) {
         bad.push(other.plant_name);
@@ -2249,7 +2527,7 @@ function showSectionPanel(section) {
     '<div class="mb-2">' +
     '<label class="form-label small">Pflanze</label>' +
     '<input type="text" class="form-control form-control-sm" id="fsPlant" value="' + esc(section.plant_name || '') + '" placeholder="z.B. Salbei" list="plantDatalist">' +
-    '<datalist id="plantDatalist">' + PLANT_CATALOG.map(function(p) { return '<option value="' + esc(p.name) + '">'; }).join("") + '</datalist>' +
+    '<datalist id="plantDatalist">' + getCatalogForDatalist().map(function(p) { return '<option value="' + esc(p.name) + '">'; }).join("") + '</datalist>' +
     '</div>' +
     companionHtml +
     '<div class="mb-2">' +
@@ -2291,9 +2569,15 @@ function showSectionPanel(section) {
     '</div>' +
     '<div class="d-flex gap-2">' +
     '<button class="btn btn-sm btn-irm flex-grow-1" id="fsSave"><i class="bi bi-check-lg"></i> Speichern</button>' +
+    '<button class="btn btn-sm btn-outline-secondary" id="fsCopy" title="Kopieren"><i class="bi bi-clipboard"></i></button>' +
     '<button class="btn btn-sm btn-outline-danger" id="fsDelete" title="Löschen"><i class="bi bi-trash"></i></button>' +
     '</div>';
   document.getElementById("fsSave").addEventListener("click", () => saveSection(section.id));
+  document.getElementById("fsCopy").addEventListener("click", () => {
+    fpState.clipboard = JSON.parse(JSON.stringify(section));
+    document.getElementById("fieldplanPasteBtn").classList.remove("d-none");
+    showToast("Bereich kopiert.");
+  });
   document.getElementById("fsDelete").addEventListener("click", () => {
     if (!confirm("Bereich wirklich löschen?")) return;
     adminApi("api/admin/field-plans/" + fpState.plan.id + "/sections/" + section.id, "DELETE")
@@ -2303,7 +2587,7 @@ function showSectionPanel(section) {
   var fsPlant = document.getElementById("fsPlant");
   if (fsPlant) {
     fsPlant.addEventListener("input", function() {
-      var entry = PLANT_CATALOG.find(function(c) { return c.name === fsPlant.value; });
+      var entry = getCatalogForDatalist().find(function(c) { return c.name === fsPlant.value; });
       if (entry) {
         var intervalInput = document.getElementById("fsWaterInterval");
         if (intervalInput && !intervalInput.value) {

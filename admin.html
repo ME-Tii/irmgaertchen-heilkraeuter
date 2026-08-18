@@ -340,6 +340,8 @@
               <input type="file" id="fieldplanImageInput" accept="image/*" class="d-none">
               <button class="btn btn-outline-irm btn-sm" type="button" id="fieldplanCalibrateBtn"><i class="bi bi-rulers"></i> Skalierung</button>
               <button class="btn btn-irm btn-sm" type="button" id="fieldplanDrawBtn"><i class="bi bi-pencil-square"></i> Bereich zeichnen</button>
+              <button class="btn btn-outline-irm btn-sm" type="button" id="fieldplanExportBtn"><i class="bi bi-download"></i> Exportieren</button>
+              <button class="btn btn-outline-irm btn-sm d-none" type="button" id="fieldplanPasteBtn"><i class="bi bi-clipboard-plus"></i> Einfügen</button>
             </div>
           </div>
 
@@ -547,6 +549,65 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Abbrechen</button>
           <button type="button" class="btn btn-irm" id="pdSave"><i class="bi bi-check-lg"></i> Speichern</button>
+        </div>
+      </div>
+              </div>
+              <div class="card mt-3" id="fieldPlantCatalogCard">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <span><i class="bi bi-book"></i> Pflanzenkatalog</span>
+                  <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-irm" type="button" id="plantCatalogAdd" title="Pflanze hinzufügen"><i class="bi bi-plus"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="plantCatalogRefresh" title="Aktualisieren"><i class="bi bi-arrow-clockwise"></i></button>
+                  </div>
+                </div>
+                <div class="card-body p-0" id="fieldPlantCatalogBody" style="max-height:300px;overflow-y:auto;">
+                  <p class="text-muted small mb-0 p-3">Lade...</p>
+                </div>
+              </div>
+            </div>
+
+  <div class="modal fade" id="plantCatalogModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="pcModalLabel">Pflanze</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="pcEntryId">
+          <div class="mb-2">
+            <label class="form-label small">Name</label>
+            <input type="text" class="form-control form-control-sm" id="pcName" placeholder="z.B. Tomate">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Kategorie</label>
+            <select class="form-select form-select-sm" id="pcCategory">
+              <option value="Küchenkräuter">Küchenkräuter</option>
+              <option value="Heilkräuter">Heilkräuter</option>
+              <option value="Gemüse">Gemüse</option>
+              <option value="Blumen">Blumen</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Bewässerung</label>
+            <input type="text" class="form-control form-control-sm" id="pcWatering" placeholder="z.B. Regelmäßig feucht">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Ertrag (kg/m²)</label>
+            <input type="number" class="form-control form-control-sm" id="pcYield" min="0" step="0.1" placeholder="z.B. 5.0">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Begleitpflanzen (kommagetrennt)</label>
+            <input type="text" class="form-control form-control-sm" id="pcCompanions" placeholder="z.B. Basilikum, Petersilie">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Unverträglich (kommagetrennt)</label>
+            <input type="text" class="form-control form-control-sm" id="pcIncompatible" placeholder="z.B. Fenchel, Salbei">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+          <button type="button" class="btn btn-sm btn-irm" id="pcSave" onclick="savePlantCatalogEntry()">Speichern</button>
         </div>
       </div>
     </div>
