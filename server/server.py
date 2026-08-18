@@ -1626,18 +1626,20 @@ def public_plant_catalog():
 def public_current_planting():
     try:
         plans = db.list_field_plans()
+        if not plans:
+            return jsonify({"sections": []})
+        most_recent = plans[0]
+        secs = db.list_field_sections(most_recent["id"])
         all_sections = []
-        for plan in plans:
-            secs = db.list_field_sections(plan["id"])
-            for s in secs:
-                if s.get("plant_name"):
-                    all_sections.append({
-                        "plant_name": s["plant_name"],
-                        "name": s.get("name", ""),
-                        "planting_date": s.get("planting_date"),
-                        "expected_harvest": s.get("expected_harvest"),
-                        "color": s.get("color", ""),
-                    })
+        for s in secs:
+            if s.get("plant_name"):
+                all_sections.append({
+                    "plant_name": s["plant_name"],
+                    "name": s.get("name", ""),
+                    "planting_date": s.get("planting_date"),
+                    "expected_harvest": s.get("expected_harvest"),
+                    "color": s.get("color", ""),
+                })
         return jsonify({"sections": all_sections})
     except Exception as e:
         return jsonify({"error": str(e), "sections": []}), 500
