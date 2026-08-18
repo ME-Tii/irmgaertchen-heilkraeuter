@@ -353,40 +353,47 @@
       var sections = data.sections || [];
       if (sections.length === 0) return;
       section.style.display = "";
-      var now = new Date();
-      var year = now.getFullYear();
-      var html = '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>';
-      html += '<th style="min-width:120px">Pflanze</th>';
-      for (var m = 0; m < 12; m++) {
-        var cls = m === now.getMonth() ? ' class="table-active"' : '';
-        html += '<th' + cls + ' style="width:70px;text-align:center;font-size:.75rem">' + MONTHS[m] + '</th>';
-      }
-      html += '</tr></thead><tbody>';
+      var items = [];
       sections.forEach(function(s) {
         if (!s.plant_name) return;
-        var pStart = s.planting_date ? new Date(s.planting_date) : null;
-        var hEnd = s.expected_harvest ? new Date(s.expected_harvest) : null;
-        html += '<tr><td class="small fw-semibold">' + s.plant_name;
-        if (s.name) html += ' <span class="text-muted">(' + s.name + ')</span>';
-        html += '</td>';
-        for (var m = 0; m < 12; m++) {
-          var active = false;
-          if (pStart && hEnd) {
-            active = m >= pStart.getMonth() && m <= hEnd.getMonth() && year >= pStart.getFullYear() && year <= hEnd.getFullYear();
-          } else if (pStart) {
-            active = m >= pStart.getMonth() && year === pStart.getFullYear();
-          } else if (hEnd) {
-            active = m <= hEnd.getMonth() && year === hEnd.getFullYear();
-          }
-          var bg = active ? (m === now.getMonth() ? "#28a745" : "#d4edda") : "#f8f9fa";
-          var icon = active ? '<i class="bi bi-check-lg" style="color:' + (m === now.getMonth() ? '#fff' : '#28a745') + '"></i>' : '';
-          html += '<td style="background:' + bg + ';text-align:center">' + icon + '</td>';
-        }
-        html += '</tr>';
+        items.push({
+          name: s.plant_name + (s.name ? " (" + s.name + ")" : ""),
+          start: s.planting_date || null,
+          end: s.expected_harvest || null,
+          color: s.color || "#3f6b3b"
+        });
       });
-      html += '</tbody></table></div>';
-      html += '<div class="mt-2 small text-muted"><span style="background:#d4edda;padding:0 8px;border-radius:3px"><i class="bi bi-check-lg text-success"></i></span> Wachstumszeit &nbsp; <span style="background:#28a745;padding:0 8px;border-radius:3px"><i class="bi bi-check-lg text-white"></i></span> Aktueller Monat</div>';
-      timeline.innerHTML = html;
+      if (items.length === 0) return;
+      var minDate = null, maxDate = null;
+      items.forEach(function(it) {
+        if (it.start) { var d = new Date(it.start); if (!minDate || d < minDate) minDate = d; }
+        if (it.end) { var d2 = new Date(it.end); if (!maxDate || d2 > maxDate) maxDate = d2; }
+      });
+      if (!minDate) minDate = new Date();
+      if (!maxDate) maxDate = new Date(minDate);
+      if (minDate.getTime() === maxDate.getTime()) { maxDate = new Date(minDate); maxDate.setMonth(maxDate.getMonth() + 3); }
+      var range = maxDate.getTime() - minDate.getTime();
+      if (range <= 0) range = 90 * 24 * 3600 * 1000;
+      var m0 = minDate.getMonth();
+      var headerHtml = '<div class="d-flex justify-content-between small text-muted mb-1">';
+      for (var mi = 0; mi <= 6; mi++) {
+        var mIdx = (m0 + mi) % 12;
+        headerHtml += '<span>' + MONTHS[mIdx] + '</span>';
+      }
+      headerHtml += '</div>';
+      var barsHtml = '';
+      items.forEach(function(it) {
+        var s = it.start ? new Date(it.start) : minDate;
+        var e = it.end ? new Date(it.end) : new Date(s.getTime() + 60 * 24 * 3600 * 1000);
+        var left = Math.max(0, (s.getTime() - minDate.getTime()) / range * 100);
+        var width = Math.max(2, (e.getTime() - s.getTime()) / range * 100);
+        if (left + width > 100) width = 100 - left;
+        barsHtml += '<div class="position-relative mb-1" style="height:24px;">' +
+          '<div class="position-absolute rounded" style="left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + it.color + ';opacity:0.85;"></div>' +
+          '<span class="position-absolute small text-truncate" style="left:' + Math.max(0, left + 0.5) + '%;top:3px;line-height:18px;max-width:' + Math.max(5, width - 1) + '%;color:#fff;padding-left:4px;font-weight:500;">' + it.name + '</span>' +
+          '</div>';
+      });
+      timeline.innerHTML = headerHtml + barsHtml;
     }).catch(function() {});
   })();
   </script>
