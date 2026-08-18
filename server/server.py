@@ -1678,6 +1678,42 @@ def admin_delete_plant_catalog_entry(entry_id):
     return jsonify({"ok": True})
 
 
+@app.get("/api/admin/rotation-history")
+def admin_rotation_history():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify({"history": db.get_crop_rotation_history()})
+
+
+@app.post("/api/admin/rotation-snapshot")
+def admin_save_rotation_snapshot():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    plan_name = data.get("plan_name", "")
+    sections = data.get("sections", [])
+    plan_year = data.get("plan_year")
+    if not plan_year:
+        from datetime import datetime
+        plan_year = datetime.utcnow().year
+    db.save_crop_rotation_snapshot(plan_name, sections, plan_year)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/rotation-conflicts")
+def admin_rotation_conflicts():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    sections = data.get("sections", [])
+    plant_families = data.get("plant_families", {})
+    conflicts = db.get_rotation_conflicts(sections, plant_families)
+    return jsonify({"conflicts": conflicts})
+
+
 @app.get("/api/admin/backup")
 def admin_backup():
     bad = _admin_ok(require_admin())

@@ -199,6 +199,15 @@ SQLITE_SCHEMA = [
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS crop_rotation_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_name TEXT NOT NULL DEFAULT '',
+        section_name TEXT NOT NULL DEFAULT '',
+        plant_name TEXT NOT NULL DEFAULT '',
+        plant_family TEXT NOT NULL DEFAULT '',
+        plan_year INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -359,6 +368,15 @@ PG_SCHEMA = [
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
+    """CREATE TABLE IF NOT EXISTS crop_rotation_history (
+        id SERIAL PRIMARY KEY,
+        plan_name TEXT NOT NULL DEFAULT '',
+        section_name TEXT NOT NULL DEFAULT '',
+        plant_name TEXT NOT NULL DEFAULT '',
+        plant_family TEXT NOT NULL DEFAULT '',
+        plan_year INTEGER,
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+    );""",
 ]
 
 SCHEMA = PG_SCHEMA if USE_PG else SQLITE_SCHEMA
@@ -443,6 +461,26 @@ def init_db():
         conn.rollback()
     try:
         conn.execute(_sql("ALTER TABLE plant_catalog ADD COLUMN price_per_kg REAL"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        if USE_PG:
+            conn.execute(_sql(
+                "CREATE TABLE IF NOT EXISTS crop_rotation_history ("
+                "id SERIAL PRIMARY KEY, plan_name TEXT NOT NULL DEFAULT '', "
+                "section_name TEXT NOT NULL DEFAULT '', plant_name TEXT NOT NULL DEFAULT '', "
+                "plant_family TEXT NOT NULL DEFAULT '', plan_year INTEGER, "
+                "created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'))"
+            ))
+        else:
+            conn.execute(_sql(
+                "CREATE TABLE IF NOT EXISTS crop_rotation_history ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, plan_name TEXT NOT NULL DEFAULT '', "
+                "section_name TEXT NOT NULL DEFAULT '', plant_name TEXT NOT NULL DEFAULT '', "
+                "plant_family TEXT NOT NULL DEFAULT '', plan_year INTEGER, "
+                "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+            ))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1283,6 +1321,69 @@ def seed_plant_catalog(conn):
             (name, cat, water, json.dumps(comp, ensure_ascii=False), json.dumps(incomp, ensure_ascii=False), ykg, ppk),
         )
     conn.commit()
+
+
+# ---- Crop Rotation ----
+
+def save_crop_rotation_snapshot(plan_name, sections, plan_year):
+    conn = get_conn()
+    for s in sections:
+        plant = s.get("plant_name", "")
+        if not plant:
+            continue
+        section_name = s.get("name", "")
+        conn.execute(
+            _sql(
+                "INSERT INTO crop_rotation_history (plan_name, section_name, plant_name, plant_family, plan_year) "
+                "VALUES (%s, %s, %s, %s, %s)"
+            ),
+            (plan_name, section_name, plant, "", plan_year),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_crop_rotation_history():
+    conn = get_conn()
+    rows = conn.execute(_sql("SELECT * FROM crop_rotation_history ORDER BY plan_year DESC, plan_name")).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows]
+
+
+def get_rotation_conflicts(sections, plant_families=None):
+    history = get_crop_rotation_history()
+    if not history:
+        return []
+    conflicts = []
+    for s in sections:
+        plant = s.get("plant_name", "")
+        if not plant:
+            continue
+        s_name = s.get("name", "")
+        family = (plant_families or {}).get(plant, "")
+        for h in history:
+            if h.get("section_name") != s_name:
+                continue
+            h_family = (plant_families or {}).get(h.get("plant_name", ""), "")
+            if h.get("plant_name") == plant:
+                conflicts.append({
+                    "section_name": s_name,
+                    "plant_name": plant,
+                    "previous_year": h.get("plan_year"),
+                    "previous_plant": h.get("plant_name"),
+                    "message": f'{plant} wurde bereits in {h.get("plan_year")} in "{s_name}" angebaut.',
+                })
+                break
+            elif family and h_family and family == h_family:
+                conflicts.append({
+                    "section_name": s_name,
+                    "plant_name": plant,
+                    "previous_year": h.get("plan_year"),
+                    "previous_plant": h.get("plant_name"),
+                    "message": f'Familie "{family}": {plant} nach {h.get("plant_name")} ({h.get("plan_year")}) in "{s_name}".',
+                })
+                break
+    return conflicts
 
 
 # ---- Backup / Restore ----
