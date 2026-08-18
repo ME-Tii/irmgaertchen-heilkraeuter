@@ -391,14 +391,20 @@
         var width = Math.max(2, (e.getTime() - s.getTime()) / range * 100);
         if (left + width > 100) width = 100 - left;
         var tip = it.name;
-        if (it.start) tip += ' | Pflanzung: ' + it.start;
-        if (it.end) tip += ' | Ernte: ' + it.end;
-        barsHtml += '<div class="position-relative mb-1" style="height:24px;" title="' + tip.replace(/"/g, '&quot;') + '">' +
-          '<div class="position-absolute rounded" style="left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + it.color + ';opacity:0.85;"></div>' +
-          '<span class="position-absolute small text-truncate" style="left:' + Math.max(0, left + 0.5) + '%;top:3px;line-height:18px;max-width:' + Math.max(5, width - 1) + '%;color:#fff;padding-left:4px;font-weight:500;">' + it.name + '</span>' +
+        if (it.start) tip += '\nPflanzung: ' + it.start;
+        if (it.end) tip += '\nErnte: ' + it.end;
+        barsHtml += '<div class="position-relative mb-1" style="height:24px;">' +
+          '<div class="fp-bar-wrap" style="position:absolute;left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + it.color + ';opacity:0.85;border-radius:4px;cursor:default;" data-tip="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '<br>') + '">' +
+          '<span class="position-absolute small text-truncate" style="left:0;right:0;top:3px;line-height:18px;color:#fff;padding-left:4px;font-weight:500;">' + it.name + '</span>' +
+          '<div class="fp-bar-tip" style="display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;white-space:nowrap;z-index:10;pointer-events:none;">' + tip + '</div>' +
+          '</div>' +
           '</div>';
       });
       timeline.innerHTML = headerHtml + barsHtml;
+      timeline.querySelectorAll('.fp-bar-wrap').forEach(function(el) {
+        el.addEventListener('mouseenter', function() { el.querySelector('.fp-bar-tip').style.display = ''; });
+        el.addEventListener('mouseleave', function() { el.querySelector('.fp-bar-tip').style.display = 'none'; });
+      });
     }).catch(function() {});
   })();
   </script>
