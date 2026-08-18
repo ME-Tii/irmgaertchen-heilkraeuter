@@ -1961,6 +1961,19 @@ function renderFieldCanvas() {
   fpState.sections.forEach((s) => {
     const lbl = s._label;
     if (!lbl) return;
+    const displaced = Math.abs(lbl.x - lbl.ox) > 1 || Math.abs(lbl.y - lbl.oy) > 1;
+    if (displaced) {
+      ctx.beginPath();
+      ctx.moveTo(lbl.ox, lbl.oy);
+      ctx.lineTo(lbl.x, lbl.y);
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(lbl.ox, lbl.oy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fill();
+    }
     ctx.font = "bold 13px Inter, sans-serif";
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(lbl.x - lbl.w / 2, lbl.y - lbl.h / 2, lbl.w, lbl.h);
@@ -2157,6 +2170,19 @@ function exportFieldPlanPNG() {
 
   tmpCtx.font = tmpFont;
   labelList.forEach(function(lbl) {
+    var displaced = Math.abs(lbl.x - lbl.ox) > 1 || Math.abs(lbl.y - lbl.oy) > 1;
+    if (displaced) {
+      tmpCtx.beginPath();
+      tmpCtx.moveTo(lbl.ox, lbl.oy);
+      tmpCtx.lineTo(lbl.x, lbl.y);
+      tmpCtx.strokeStyle = "rgba(255,255,255,0.6)";
+      tmpCtx.lineWidth = 1;
+      tmpCtx.stroke();
+      tmpCtx.beginPath();
+      tmpCtx.arc(lbl.ox, lbl.oy, 3, 0, Math.PI * 2);
+      tmpCtx.fillStyle = "rgba(255,255,255,0.7)";
+      tmpCtx.fill();
+    }
     tmpCtx.fillStyle = "rgba(0,0,0,0.55)";
     tmpCtx.fillRect(lbl.x - lbl.w / 2, lbl.y - lbl.h / 2, lbl.w, lbl.h);
     tmpCtx.fillStyle = "#fff";
