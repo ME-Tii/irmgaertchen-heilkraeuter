@@ -1961,19 +1961,6 @@ function renderFieldCanvas() {
   fpState.sections.forEach((s) => {
     const lbl = s._label;
     if (!lbl) return;
-    const displaced = Math.abs(lbl.x - lbl.ox) > 1 || Math.abs(lbl.y - lbl.oy) > 1;
-    if (displaced) {
-      ctx.beginPath();
-      ctx.moveTo(lbl.ox, lbl.oy);
-      ctx.lineTo(lbl.x, lbl.y);
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(lbl.ox, lbl.oy, 3, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.fill();
-    }
     ctx.font = "bold 13px Inter, sans-serif";
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(lbl.x - lbl.w / 2, lbl.y - lbl.h / 2, lbl.w, lbl.h);
@@ -2132,17 +2119,54 @@ function exportFieldPlanPNG() {
     const cy = pts.reduce(function(sum, p) { return sum + p.y; }, 0) / pts.length * canvas.height;
     const label = s.plant_name || s.name || "";
     if (!label) return;
-    tmpCtx.font = "bold 13px Inter, sans-serif";
-    var lines2 = [label];
-    var lineH = 18, totalH = lines2.length * lineH + 6, maxW = 0;
-    for (var li = 0; li < lines2.length; li++) maxW = Math.max(maxW, tmpCtx.measureText(lines2[li]).width + 10);
+    s._expLabel = { x: cx, y: cy, ox: cx, oy: cy, label: label };
+  });
+
+  const tmpFont = "bold 13px Inter, sans-serif";
+  tmpCtx.font = tmpFont;
+  fpState.sections.forEach(function(s) {
+    if (!s._expLabel) return;
+    const lbl = s._expLabel;
+    const tw = tmpCtx.measureText(lbl.label).width + 10;
+    lbl.w = tw;
+    lbl.h = 24;
+  });
+
+  const labelList = fpState.sections.map(function(s) { return s._expLabel; }).filter(Boolean);
+  for (var iter = 0; iter < 50; iter++) {
+    var moved = false;
+    for (var i = 0; i < labelList.length; i++) {
+      for (var j = i + 1; j < labelList.length; j++) {
+        var a = labelList[i], b = labelList[j];
+        var overlapX = (a.w / 2 + b.w / 2) - Math.abs(a.x - b.x);
+        var overlapY = (a.h / 2 + b.h / 2) - Math.abs(a.y - b.y);
+        if (overlapX > 0 && overlapY > 0) {
+          moved = true;
+          var dx = a.x - b.x || 1;
+          var dy = a.y - b.y || 1;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          var pushX = dx / dist * overlapX / 2;
+          var pushY = dy / dist * overlapY / 2;
+          a.x += pushX; a.y += pushY;
+          b.x -= pushX; b.y -= pushY;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  tmpCtx.font = tmpFont;
+  labelList.forEach(function(lbl) {
     tmpCtx.fillStyle = "rgba(0,0,0,0.55)";
-    tmpCtx.fillRect(cx - maxW / 2, cy - totalH / 2, maxW, totalH);
+    tmpCtx.fillRect(lbl.x - lbl.w / 2, lbl.y - lbl.h / 2, lbl.w, lbl.h);
     tmpCtx.fillStyle = "#fff";
     tmpCtx.textAlign = "center";
     tmpCtx.textBaseline = "middle";
-    tmpCtx.fillText(label, cx, cy);
+    tmpCtx.fillText(lbl.label, lbl.x, lbl.y);
   });
+
+  fpState.sections.forEach(function(s) { delete s._expLabel; });
+
   tmpCanvas.toBlob(function(blob) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
