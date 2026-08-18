@@ -393,8 +393,8 @@
         var tip = it.name;
         if (it.start) tip += ' | Pflanzung: ' + it.start;
         if (it.end) tip += ' | Ernte: ' + it.end;
-        barsHtml += '<div class="position-relative mb-1" style="height:24px;">' +
-          '<div class="position-absolute rounded" style="left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + it.color + ';opacity:0.85;cursor:default;" title="' + tip.replace(/"/g, '&quot;') + '"></div>' +
+        barsHtml += '<div class="position-relative mb-1" style="height:24px;" title="' + tip.replace(/"/g, '&quot;') + '">' +
+          '<div class="position-absolute rounded" style="left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + it.color + ';opacity:0.85;"></div>' +
           '<span class="position-absolute small text-truncate" style="left:' + Math.max(0, left + 0.5) + '%;top:3px;line-height:18px;max-width:' + Math.max(5, width - 1) + '%;color:#fff;padding-left:4px;font-weight:500;">' + it.name + '</span>' +
           '</div>';
       });
