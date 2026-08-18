@@ -803,12 +803,13 @@ var WATERING_FREQ = {
   "regelmäßig feucht": 1
 };
 
-function getWateringFrequencyDays(schedule, plantName) {
-  var s = (schedule || "").toLowerCase().trim();
+function getWateringFrequencyDays(section) {
+  if (section.watering_interval && section.watering_interval > 0) return section.watering_interval;
+  var s = (section.watering_schedule || "").toLowerCase().trim();
   for (var key in WATERING_FREQ) {
     if (s.indexOf(key) !== -1) return WATERING_FREQ[key];
   }
-  var entry = PLANT_CATALOG.find(function(c) { return c.name === plantName; });
+  var entry = PLANT_CATALOG.find(function(c) { return c.name === (section.plant_name || ""); });
   if (entry) {
     var ws = (entry.watering || "").toLowerCase();
     for (var k2 in WATERING_FREQ) {
@@ -819,7 +820,7 @@ function getWateringFrequencyDays(schedule, plantName) {
 }
 
 function getNextWateringDate(section) {
-  var freq = getWateringFrequencyDays(section.watering_schedule, section.plant_name);
+  var freq = getWateringFrequencyDays(section);
   if (freq <= 0) return null;
   var last = section.watering_last ? new Date(section.watering_last + "T00:00:00") : null;
   if (!last) return new Date();
@@ -848,7 +849,7 @@ function renderWateringCalendar() {
     var name = s.plant_name || s.name || "Bereich";
     for (var i = 0; i < days.length; i++) {
       var diff = Math.round((days[i].date.getTime() - next.getTime()) / 86400000);
-      var freq = getWateringFrequencyDays(s.watering_schedule, s.plant_name);
+      var freq = getWateringFrequencyDays(s);
       if (freq > 0 && diff >= 0 && diff % freq === 0) {
         days[i].sections.push({ id: s.id, name: name, color: s.color || "#3f6b3b" });
       }
@@ -2285,6 +2286,10 @@ function showSectionPanel(section) {
     '<input type="text" class="form-control form-control-sm" id="fsWater" value="' + esc(section.watering_schedule || '') + '" placeholder="z.B. Jeden 2. Tag">' +
     '</div>' +
     '<div class="mb-2">' +
+    '<label class="form-label small">Intervall (Tage)</label>' +
+    '<input type="number" class="form-control form-control-sm" id="fsWaterInterval" min="1" max="30" value="' + (section.watering_interval || '') + '" placeholder="z.B. 2">' +
+    '</div>' +
+    '<div class="mb-2">' +
     '<label class="form-label small">Notizen</label>' +
     '<textarea class="form-control form-control-sm" id="fsNotes" rows="2">' + esc(section.notes || '') + '</textarea>' +
     '</div>' +
@@ -2312,12 +2317,18 @@ function showSectionPanel(section) {
         if (waterInput && !waterInput.value.trim()) {
           waterInput.value = entry.watering;
         }
+        var intervalInput = document.getElementById("fsWaterInterval");
+        if (intervalInput && !intervalInput.value) {
+          var freq = getWateringFrequencyDays({ watering_schedule: entry.watering, plant_name: entry.name });
+          if (freq > 0) intervalInput.value = freq;
+        }
       }
     });
   }
 }
 
 function saveSection(sectionId) {
+  const intervalVal = document.getElementById("fsWaterInterval").value;
   const data = {
     name: document.getElementById("fsName").value.trim(),
     plant_name: document.getElementById("fsPlant").value.trim(),
@@ -2326,6 +2337,7 @@ function saveSection(sectionId) {
     expected_harvest: document.getElementById("fsHarvest").value || null,
     growth_stage: document.getElementById("fsStage").value,
     watering_schedule: document.getElementById("fsWater").value.trim(),
+    watering_interval: intervalVal ? parseInt(intervalVal) || null : null,
     notes: document.getElementById("fsNotes").value.trim(),
     color: document.getElementById("fsColor").value,
   };

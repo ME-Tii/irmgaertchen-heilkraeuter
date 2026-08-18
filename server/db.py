@@ -183,6 +183,7 @@ SQLITE_SCHEMA = [
         width_m REAL,
         height_m REAL,
         watering_last TEXT,
+        watering_interval INTEGER,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
@@ -330,6 +331,7 @@ PG_SCHEMA = [
         width_m REAL,
         height_m REAL,
         watering_last TEXT,
+        watering_interval INTEGER,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
@@ -407,6 +409,11 @@ def init_db():
         conn.rollback()
     try:
         conn.execute(_sql("ALTER TABLE field_sections ADD COLUMN watering_last TEXT"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE field_sections ADD COLUMN watering_interval INTEGER"))
         conn.commit()
     except Exception:
         conn.rollback()
