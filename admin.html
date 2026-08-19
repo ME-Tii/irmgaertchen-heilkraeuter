@@ -154,9 +154,24 @@
           <p class="text-muted">Registrierte Kunden erscheinen hier.</p>
         </div>
         <div id="customersTableWrap">
-          <div class="input-group input-group-sm w-auto mb-2">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="search" id="customersSearch" class="form-control" placeholder="Name, E-Mail oder Benutzername suchen…" style="max-width:300px;">
+          <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+            <div class="input-group input-group-sm w-auto">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="search" id="customersSearch" class="form-control" placeholder="Name, E-Mail oder Benutzername suchen…" style="max-width:300px;">
+            </div>
+            <div class="input-group input-group-sm w-auto">
+              <span class="input-group-text"><i class="bi bi-sort-down"></i></span>
+              <select id="customersSort" class="form-select" style="max-width:220px;">
+                <option value="created_at_desc">Registriert (neueste)</option>
+                <option value="created_at_asc">Registriert (älteste)</option>
+                <option value="name_asc">Name (A–Z)</option>
+                <option value="name_desc">Name (Z–A)</option>
+                <option value="orders_desc">Bestellungen (meiste)</option>
+                <option value="orders_asc">Bestellungen (wenigste)</option>
+                <option value="spent_desc">Umsatz (höchste)</option>
+                <option value="spent_asc">Umsatz (niedrigste)</option>
+              </select>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="table table-striped align-middle">

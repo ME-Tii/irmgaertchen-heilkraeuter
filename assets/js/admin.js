@@ -2999,6 +2999,7 @@ function renderEmailTemplates() {
 // ---------------------------------------------------------------- customers
 
 var CUSTOMERS_QUERY = "";
+var CUSTOMERS_SORT = "created_at_desc";
 
 function loadCustomers() {
   adminApi("api/admin/customers")
@@ -3021,13 +3022,38 @@ function filterCustomers(list) {
   });
 }
 
+function sortCustomers(list) {
+  var key = CUSTOMERS_SORT;
+  var asc = key.indexOf("_asc") !== -1;
+  var field = key.replace(/_asc$|_desc$/, "");
+  return list.slice().sort(function(a, b) {
+    var va, vb;
+    if (field === "name") {
+      va = (a.name || a.username || "").toLowerCase();
+      vb = (b.name || b.username || "").toLowerCase();
+    } else if (field === "orders") {
+      va = a.order_count || 0;
+      vb = b.order_count || 0;
+    } else if (field === "spent") {
+      va = a.total_spent || 0;
+      vb = b.total_spent || 0;
+    } else {
+      va = a.created_at || "";
+      vb = b.created_at || "";
+    }
+    if (va < vb) return asc ? -1 : 1;
+    if (va > vb) return asc ? 1 : -1;
+    return 0;
+  });
+}
+
 function renderCustomers() {
   var body = document.getElementById("customersBody");
   var noCustomers = document.getElementById("noCustomers");
   var tableWrap = document.getElementById("customersTableWrap");
   if (!body) return;
   var all = window.ADMIN_CUSTOMERS || [];
-  var customers = filterCustomers(all);
+  var customers = sortCustomers(filterCustomers(all));
 
   if (all.length === 0) {
     if (noCustomers) noCustomers.classList.remove("d-none");
@@ -3066,6 +3092,15 @@ function renderCustomers() {
     searchEl._bound = true;
     searchEl.addEventListener("input", function() {
       CUSTOMERS_QUERY = searchEl.value;
+      renderCustomers();
+    });
+  }
+
+  var sortEl = document.getElementById("customersSort");
+  if (sortEl && !sortEl._bound) {
+    sortEl._bound = true;
+    sortEl.addEventListener("change", function() {
+      CUSTOMERS_SORT = sortEl.value;
       renderCustomers();
     });
   }
