@@ -140,7 +140,6 @@ def create_shipment(order, config, service="FEDEX_GROUND"):
             "labelSpecification": {
                 "labelFormatType": "COMMON2D",
                 "imageType": "PDF",
-                "labelStockType": "PAPER_7X4.75",
             },
             "packages": [{
                 "weight": {
