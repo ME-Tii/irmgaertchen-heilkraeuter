@@ -534,6 +534,17 @@ def init_db():
     except Exception:
         conn.rollback()
     prune_sessions(conn)
+    cur = conn.execute(_sql("SELECT COUNT(*) AS c FROM email_templates WHERE key = 'newsletter'"))
+    if cur.fetchone()["c"] == 0:
+        conn.execute(
+            _sql("INSERT INTO email_templates (key, name, subject, body, enabled) VALUES (%s, %s, %s, %s, %s)"),
+            ("newsletter", "Newsletter",
+             "Irmgärtchen Newsletter – Ernte-News & Tipps",
+             "Hallo {name},\n\nhier kommt dein Newsletter von Irmgärtchen Heilkräuter!\n\n{harvest_section}"
+             "Viele Grüße\nDein Irmgärtchen-Team",
+             1),
+        )
+        conn.commit()
     for slug, info in CATALOG.items():
         conn.execute(
             _sql("UPDATE products SET image = %s WHERE slug = %s AND (image = '' OR image IS NULL)"),

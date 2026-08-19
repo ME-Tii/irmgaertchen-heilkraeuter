@@ -1372,15 +1372,23 @@ def admin_newsletter_send():
     subscribers = db.get_newsletter_subscribers()
     if not subscribers:
         return err("Keine Newsletter-Abonnenten vorhanden.", 400)
-    harvests = db.get_upcoming_harvests(14)
-    subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
-    sent = 0
-    for sub in subscribers:
-        s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests, subject=subject)
-        if mailer.send_newsletter(sub, s, html, plain):
-            sent += 1
-    db.log_newsletter_send(sent)
-    return jsonify({"ok": True, "sent": sent, "total": len(subscribers)})
+    try:
+        harvests = db.get_upcoming_harvests(14)
+        subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
+        sent = 0
+        for sub in subscribers:
+            try:
+                s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests, subject=subject)
+                if mailer.send_newsletter(sub, s, html, plain):
+                    sent += 1
+            except Exception as sub_err:
+                print(f"[newsletter] Fehler an {sub.get('email', '?')}: {sub_err}")
+        db.log_newsletter_send(sent)
+        return jsonify({"ok": True, "sent": sent, "total": len(subscribers)})
+    except Exception as e:
+        print(f"[newsletter] Send-Fehler: {e}")
+        import traceback; traceback.print_exc()
+        return err(f"Senden fehlgeschlagen: {e}", 500)
 
 
 @app.get("/api/admin/products")

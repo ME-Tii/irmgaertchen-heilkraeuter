@@ -3006,9 +3006,8 @@ function loadNewsletterPreview() {
   if (box) box.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Lade Vorschau…</div>';
   adminApi("api/admin/newsletter/preview")
     .then(function(data) {
-      var blob = new Blob([data.html], { type: "text/html" });
-      var url = URL.createObjectURL(blob);
-      if (box) box.innerHTML = '<iframe src="' + url + '" style="width:100%;height:450px;border:none;"></iframe>';
+      var b64 = btoa(unescape(encodeURIComponent(data.html)));
+      if (box) box.innerHTML = '<iframe src="data:text/html;base64,' + b64 + '" style="width:100%;height:450px;border:none;"></iframe>';
       if (msg) {
         if (data.harvests && data.harvests.length) {
           showMsg("newsletterMsg", data.harvests.length + " Pflanze(n) erntereif: " + data.harvests.join(", "), "info");
