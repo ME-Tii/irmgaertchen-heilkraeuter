@@ -389,24 +389,24 @@ function renderDashboard() {
         (o.discount > 0 ? '<br><small class="text-success">-' + (o.discount).toFixed(2).replace(".", ",") + " €</small>" : "") +
         "</td>" +
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
-        '<td class="text-end">' +
-        '<button class="btn btn-sm btn-outline-primary me-1 invoice-download" data-order="' + esc(o.order_no) + '" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i></button>' +
+        '<td class="text-end"><div class="d-flex justify-content-end flex-nowrap gap-1">' +
+        '<button class="btn btn-sm btn-outline-primary invoice-download" data-order="' + esc(o.order_no) + '" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i></button>' +
         (isShipping
-          ? '<button class="btn btn-sm btn-outline-success me-1 address-label-download" data-order="' + esc(o.order_no) + '" title="Versandlabel herunterladen"><i class="bi bi-upc-scan"></i></button> '
+          ? '<button class="btn btn-sm btn-outline-success address-label-download" data-order="' + esc(o.order_no) + '" title="Versandlabel herunterladen"><i class="bi bi-upc-scan"></i></button>'
           : "") +
         (isShipping
-          ? '<button class="btn btn-sm btn-outline-info me-1 packing-slip-download" data-order="' + esc(o.order_no) + '" title="Lieferschein herunterladen"><i class="bi bi-clipboard-check"></i></button> '
+          ? '<button class="btn btn-sm btn-outline-info packing-slip-download" data-order="' + esc(o.order_no) + '" title="Lieferschein herunterladen"><i class="bi bi-clipboard-check"></i></button>'
           : "") +
         (isShipping && o.labelTracking
-          ? '<span class="badge text-bg-success small me-1" title="Tracking: ' + esc(o.labelTracking) + '"><i class="bi bi-truck"></i> ' + esc(o.labelTracking.substring(0, 8)) + '…</span> '
+          ? '<span class="badge text-bg-success small align-self-center" title="Tracking: ' + esc(o.labelTracking) + '"><i class="bi bi-truck"></i> ' + esc(o.labelTracking.substring(0, 8)) + '…</span>'
           : "") +
         (o.returnRequested && !o.returnProcessed
-          ? '<button class="btn btn-sm btn-outline-warning return-done" data-order="' + esc(o.order_no) + '" title="Rückgabe als erledigt markieren"><i class="bi bi-check2-circle"></i></button> '
+          ? '<button class="btn btn-sm btn-outline-warning return-done" data-order="' + esc(o.order_no) + '" title="Rückgabe als erledigt markieren"><i class="bi bi-check2-circle"></i></button>'
           : "") +
         (o.stripe_session_id && !o.refunded && o.status !== "Zahlung ausstehend"
-          ? '<button class="btn btn-sm btn-outline-danger refund-btn" data-order="' + esc(o.order_no) + '" title="Betrag über Stripe erstatten"><i class="bi bi-cash-coin"></i></button> '
+          ? '<button class="btn btn-sm btn-outline-danger refund-btn" data-order="' + esc(o.order_no) + '" title="Betrag über Stripe erstatten"><i class="bi bi-cash-coin"></i></button>'
           : "") +
-        '<button class="btn btn-sm btn-outline-danger order-delete" data-order="' + esc(o.order_no) + '" title="Löschen"><i class="bi bi-trash"></i></button></td>' +
+        '<button class="btn btn-sm btn-outline-danger order-delete" data-order="' + esc(o.order_no) + '" title="Löschen"><i class="bi bi-trash"></i></button></div></td>' +
         "</tr>"
       );
     })
