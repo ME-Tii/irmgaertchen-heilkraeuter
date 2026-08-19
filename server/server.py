@@ -1356,7 +1356,10 @@ def admin_newsletter_preview():
         return bad
     harvests = db.get_upcoming_harvests(14)
     html = mailer.build_newsletter_html("Vorschau", harvests, email="vorschau@irmgaertchen.de")
-    return jsonify({"html": html, "harvests": [h["plant_name"] + " – " + (h["expected_harvest"] or "") for h in harvests]})
+    import re
+    body_match = re.search(r"<body[^>]*>(.*)</body>", html, re.DOTALL)
+    body_html = body_match.group(1) if body_match else html
+    return jsonify({"html": body_html, "harvests": [h["plant_name"] + " – " + (h["expected_harvest"] or "") for h in harvests]})
 
 
 @app.post("/api/admin/newsletter/send")
