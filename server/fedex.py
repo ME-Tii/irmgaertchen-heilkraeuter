@@ -104,6 +104,7 @@ def create_shipment(order, config, service="FEDEX_GROUND"):
 
     body = {
         "accountNumber": {"value": FEDEX_ACCOUNT_NUMBER},
+        "labelResponseOptions": "URL_ONLY",
         "requestedShipment": {
             "shipper": {
                 "address": {
@@ -118,7 +119,7 @@ def create_shipment(order, config, service="FEDEX_GROUND"):
                     "emailAddress": config.get("sender_email", ""),
                 },
             },
-            "recipient": {
+            "recipients": [{
                 "address": {
                     "streetLines": [f"{recv_street} {recv_house}".strip()],
                     "city": order.get("delivery_city", ""),
@@ -130,7 +131,7 @@ def create_shipment(order, config, service="FEDEX_GROUND"):
                     "phoneNumber": order.get("customer_phone", "").replace(" ", "").replace("-", ""),
                     "emailAddress": order.get("customer_email", ""),
                 },
-            },
+            }],
             "serviceType": service,
             "packagingType": "YOUR_PACKAGING",
             "pickupType": "DROPOFF_AT_FEDEX_LOCATION",
@@ -170,25 +171,33 @@ def create_shipment(order, config, service="FEDEX_GROUND"):
                 tracking = tn
                 break
 
-    label_result = output.get("label", {})
-    if not label_result:
-        for ct in complete_track:
-            for tr in ct.get("trackResults", []):
-                label_result = tr.get("label", {})
-                if label_result:
-                    break
-            if label_result:
-                break
+    label_url = ""
+    label_b64 = ""
+    for ct in complete_track:
+        for tr in ct.get("trackResults", []):
+            label_data = tr.get("label", {})
+            parts_list = label_data.get("parts", []) if isinstance(label_data, dict) else []
+            for part in parts_list:
+                u = part.get("url", "")
+                d = part.get("document", "") or part.get("contents", "")
+                if u:
+                    label_url = u
+                if d:
+                    label_b64 = d
 
-    parts_list = label_result.get("parts", []) if isinstance(label_result, dict) else []
-    for part in parts_list:
-        doc = part.get("document", "")
-        if doc:
-            try:
-                pdf_bytes = base64.b64decode(doc)
-                break
-            except Exception:
-                pass
+    if label_b64:
+        try:
+            pdf_bytes = base64.b64decode(label_b64)
+        except Exception:
+            pass
+
+    if not pdf_bytes and label_url:
+        try:
+            req = urllib.request.Request(label_url, headers={"Accept": "application/pdf"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                pdf_bytes = resp.read()
+        except Exception as e:
+            print(f"[fedex] Label-Download von URL fehlgeschlagen: {e}")
 
     return {
         "tracking": tracking,
