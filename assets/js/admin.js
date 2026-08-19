@@ -44,6 +44,26 @@ function adminApi(path, method, body) {
   return fetch(path, opts).then(parseApiResponse);
 }
 
+function adminDownloadFile(path, filename) {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const headers = {};
+  if (token) headers["Authorization"] = "Bearer " + token;
+  fetch(path, { headers }).then(function(r) {
+    if (!r.ok) { r.json().then(function(d) { alert(d.error || "Fehler"); }).catch(function() { alert("Fehler"); }); return; }
+    return r.blob();
+  }).then(function(blob) {
+    if (!blob) return;
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+
 function parseApiResponse(res) {
   return res.text().then((text) => {
     let data = {};
@@ -364,7 +384,7 @@ function renderDashboard() {
         "</td>" +
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
         '<td class="text-end">' +
-        '<a href="/api/admin/orders/' + esc(o.order_no) + '/invoice" class="btn btn-sm btn-outline-primary me-1" title="Rechnung herunterladen" target="_blank"><i class="bi bi-file-earmark-pdf"></i></a>' +
+        '<button class="btn btn-sm btn-outline-primary me-1 invoice-download" data-order="' + esc(o.order_no) + '" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i></button>' +
         (o.returnRequested && !o.returnProcessed
           ? '<button class="btn btn-sm btn-outline-warning return-done" data-order="' + esc(o.order_no) + '" title="Rückgabe als erledigt markieren"><i class="bi bi-check2-circle"></i></button> '
           : "") +
@@ -387,6 +407,11 @@ function renderDashboard() {
           loadDashboard();
         })
         .catch((err) => showMsg("ordersMsg", err.message, "danger"));
+    });
+  });
+  body.querySelectorAll(".invoice-download").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      adminDownloadFile("/api/admin/orders/" + encodeURIComponent(btn.dataset.order) + "/invoice", "Rechnung-" + btn.dataset.order + ".pdf");
     });
   });
   body.querySelectorAll(".order-delete").forEach((btn) => {
