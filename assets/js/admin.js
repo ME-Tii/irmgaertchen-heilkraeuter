@@ -708,6 +708,25 @@ function computeTotalArea() {
   return total;
 }
 
+function getDisplayName(section, allSections) {
+  var base = section.plant_name || section.name || "Bereich";
+  var hasDuplicate = allSections.some(function(s) {
+    return s.id !== section.id && (s.plant_name || s.name || "") === (section.plant_name || section.name || "");
+  });
+  if (!hasDuplicate) return base;
+  var counter = 1;
+  var seen = [];
+  for (var i = 0; i < allSections.length; i++) {
+    var s = allSections[i];
+    var sLabel = s.plant_name || s.name || "";
+    if (sLabel === (section.plant_name || section.name || "")) {
+      seen.push(s);
+      if (s.id === section.id) break;
+    }
+  }
+  return base + " " + seen.length + ".";
+}
+
 function renderPlanSummary() {
   const el = document.getElementById("fieldplanSummary");
   if (!el) return;
@@ -786,7 +805,7 @@ function renderTimeline() {
   fpState.sections.forEach(function(s) {
     if (!s.planting_date && !s.expected_harvest) return;
     items.push({
-      name: s.plant_name || s.name || "Bereich",
+      name: getDisplayName(s, fpState.sections),
       start: s.planting_date || null,
       end: s.expected_harvest || null,
       color: s.color || "#3f6b3b"
@@ -888,7 +907,7 @@ function renderWateringCalendar() {
     var next = getNextWateringDate(s);
     if (!next) return;
     next.setHours(0, 0, 0, 0);
-    var name = s.plant_name || s.name || "Bereich";
+    var name = getDisplayName(s, fpState.sections);
     for (var i = 0; i < days.length; i++) {
       var diff = Math.round((days[i].date.getTime() - next.getTime()) / 86400000);
       var freq = getWateringFrequencyDays(s);
@@ -2074,7 +2093,7 @@ function renderFieldCanvas() {
         ctx.stroke();
         return;
       }
-      const label = s.plant_name || s.name || "";
+      const label = getDisplayName(s, fpState.sections);
       const ppm = getPixelsPerMeter();
       let areaText = "";
       if (ppm) {
@@ -2297,7 +2316,7 @@ function exportFieldPlanPNG() {
     tmpCtx.stroke();
     const cx = pts.reduce(function(sum, p) { return sum + p.x; }, 0) / pts.length * canvas.width;
     const cy = pts.reduce(function(sum, p) { return sum + p.y; }, 0) / pts.length * canvas.height;
-    const label = s.plant_name || s.name || "";
+    const label = getDisplayName(s, fpState.sections);
     if (!label) return;
     s._expLabel = { x: cx, y: cy, ox: cx, oy: cy, label: label };
   });
@@ -2692,10 +2711,13 @@ function renderScalePanel() {
 function showSectionPanel(section) {
   const body = document.getElementById("fieldSectionBody");
   if (!body) return;
+  const header = document.querySelector("#fieldSectionPanel .card-header");
   if (!section) {
+    if (header) header.innerHTML = '<i class="bi bi-pencil-square"></i> Bereich-Eigenschaften';
     body.innerHTML = '<p class="text-muted small mb-0">Zeichnen Sie einen Bereich auf dem Grundriss, oder klicken Sie auf einen bestehenden Bereich.</p>';
     return;
   }
+  if (header) header.innerHTML = '<i class="bi bi-pencil-square"></i> ' + esc(getDisplayName(section, fpState.sections));
   const growthOptions = GROWTH_STAGES.map(
     (g) => '<option value="' + g + '"' + (g === section.growth_stage ? " selected" : "") + '>' + g + '</option>'
   ).join("");
