@@ -131,6 +131,7 @@ function switchTab(tab) {
     b.classList.toggle("active", b.dataset.tab === tab);
   });
   const ordersPanel = document.getElementById("ordersPanel");
+  const customersPanel = document.getElementById("customersPanel");
   const inventory = document.getElementById("inventory");
   const messagesPanel = document.getElementById("messagesPanel");
   const statsPanel = document.getElementById("statsPanel");
@@ -139,6 +140,7 @@ function switchTab(tab) {
   const couponsPanel = document.getElementById("couponsPanel");
   const emailsPanel = document.getElementById("emailsPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
+  if (customersPanel) customersPanel.classList.toggle("d-none", tab !== "customers");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
   if (statsPanel) statsPanel.classList.toggle("d-none", tab !== "stats");
@@ -147,6 +149,7 @@ function switchTab(tab) {
   if (couponsPanel) couponsPanel.classList.toggle("d-none", tab !== "coupons");
   if (emailsPanel) emailsPanel.classList.toggle("d-none", tab !== "emails");
   try {
+    if (tab === "customers") loadCustomers();
     if (tab === "inventory") renderInventory();
     if (tab === "messages") renderMessages();
     if (tab === "stats") loadStats();
@@ -2991,4 +2994,144 @@ function renderEmailTemplates() {
         });
     });
   });
+}
+
+// ---------------------------------------------------------------- customers
+
+var CUSTOMERS_QUERY = "";
+
+function loadCustomers() {
+  adminApi("api/admin/customers")
+    .then(function(data) {
+      window.ADMIN_CUSTOMERS = data.customers || [];
+      renderCustomers();
+    })
+    .catch(function(err) {
+      showMsg("customersMsg", err.message || "Kunden konnten nicht geladen werden.", "danger");
+    });
+}
+
+function filterCustomers(list) {
+  var q = CUSTOMERS_QUERY.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter(function(c) {
+    return (c.name || "").toLowerCase().indexOf(q) !== -1 ||
+           (c.email || "").toLowerCase().indexOf(q) !== -1 ||
+           (c.username || "").toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function renderCustomers() {
+  var body = document.getElementById("customersBody");
+  var noCustomers = document.getElementById("noCustomers");
+  var tableWrap = document.getElementById("customersTableWrap");
+  if (!body) return;
+  var all = window.ADMIN_CUSTOMERS || [];
+  var customers = filterCustomers(all);
+
+  if (all.length === 0) {
+    if (noCustomers) noCustomers.classList.remove("d-none");
+    if (tableWrap) tableWrap.classList.add("d-none");
+    body.innerHTML = "";
+    return;
+  }
+  if (noCustomers) noCustomers.classList.add("d-none");
+  if (tableWrap) tableWrap.classList.remove("d-none");
+
+  body.innerHTML = customers.map(function(c) {
+    var roleBadge = c.role === "admin"
+      ? '<span class="badge bg-danger">Admin</span>'
+      : '<span class="badge bg-secondary">Kunde</span>';
+    var regDate = c.created_at ? new Date(c.created_at).toLocaleDateString("de-DE") : "–";
+    return (
+      "<tr>" +
+      "<td><strong>" + esc(c.name || "–") + "</strong></td>" +
+      "<td>" + (c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a>" : "–") + "</td>" +
+      "<td>" + esc(c.phone || "–") + "</td>" +
+      "<td><small class=\"text-muted\">" + esc(c.username) + "</small></td>" +
+      "<td>" + roleBadge + "</td>" +
+      "<td>" + (c.order_count || 0) + "</td>" +
+      "<td>" + fmtMoney(c.total_spent) + "</td>" +
+      "<td><small class=\"text-muted\">" + regDate + "</small></td>" +
+      '<td class="text-end">' +
+      '<button class="btn btn-sm btn-outline-irm customer-detail" data-id="' + c.id + '" title="Details anzeigen"><i class="bi bi-eye"></i></button>' +
+      "</td>" +
+      "</tr>"
+    );
+  }).join("");
+
+  var searchEl = document.getElementById("customersSearch");
+  if (searchEl && !searchEl._bound) {
+    searchEl._bound = true;
+    searchEl.addEventListener("input", function() {
+      CUSTOMERS_QUERY = searchEl.value;
+      renderCustomers();
+    });
+  }
+
+  body.querySelectorAll(".customer-detail").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      showCustomerDetail(parseInt(btn.dataset.id));
+    });
+  });
+}
+
+function showCustomerDetail(userId) {
+  var body = document.getElementById("customerDetailBody");
+  if (!body) return;
+  body.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Lade…</div>';
+  adminApi("api/admin/customers/" + userId)
+    .then(function(data) {
+      var c = data.customer;
+      var orders = data.orders || [];
+      var regDate = c.created_at ? new Date(c.created_at).toLocaleString("de-DE") : "–";
+      var roleBadge = c.role === "admin"
+        ? '<span class="badge bg-danger">Admin</span>'
+        : '<span class="badge bg-secondary">Kunde</span>';
+
+      var ordersHtml = "";
+      if (orders.length === 0) {
+        ordersHtml = '<p class="text-muted small">Keine Bestellungen vorhanden.</p>';
+      } else {
+        ordersHtml =
+          '<div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0">' +
+          '<thead><tr><th>Bestellnr.</th><th>Datum</th><th>Betrag</th><th>Status</th></tr></thead><tbody>' +
+          orders.map(function(o) {
+            var date = o.created_at ? new Date(o.created_at).toLocaleString("de-DE") : "–";
+            var statusClass = STATUS_CLASS[o.status] || "bg-secondary";
+            return (
+              "<tr>" +
+              "<td><strong>" + esc(o.order_no) + "</strong></td>" +
+              "<td>" + date + "</td>" +
+              "<td>" + fmtMoney(o.total) + "</td>" +
+              '<td><span class="badge ' + statusClass + '">' + esc(o.status) + "</span></td>" +
+              "</tr>"
+            );
+          }).join("") +
+          "</tbody></table></div>";
+      }
+
+      body.innerHTML =
+        '<div class="row g-3 mb-3">' +
+        '<div class="col-md-6">' +
+        '<div class="mb-2"><span class="text-muted small">Name:</span> <strong>' + esc(c.name || "–") + "</strong></div>" +
+        '<div class="mb-2"><span class="text-muted small">E-Mail:</span> ' + (c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a>" : "–") + "</div>" +
+        '<div class="mb-2"><span class="text-muted small">Telefon:</span> ' + esc(c.phone || "–") + "</div>" +
+        '<div class="mb-2"><span class="text-muted small">Benutzername:</span> ' + esc(c.username) + "</div>" +
+        "</div>" +
+        '<div class="col-md-6">' +
+        '<div class="mb-2"><span class="text-muted small">Rolle:</span> ' + roleBadge + "</div>" +
+        '<div class="mb-2"><span class="text-muted small">Registriert:</span> ' + regDate + "</div>" +
+        '<div class="mb-2"><span class="text-muted small">Bestellungen:</span> <strong>' + orders.length + "</strong></div>" +
+        '<div class="mb-2"><span class="text-muted small">Gesamtumsatz:</span> <strong class="text-irm">' + fmtMoney(orders.reduce(function(s, o) { return s + (o.total || 0); }, 0)) + "</strong></div>" +
+        "</div>" +
+        "</div>" +
+        '<h6 class="mb-2"><i class="bi bi-receipt"></i> Bestellhistorie</h6>' +
+        ordersHtml;
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("customerDetailModal")).show();
+    })
+    .catch(function(err) {
+      body.innerHTML = '<div class="alert alert-danger">' + esc(err.message) + "</div>";
+    });
 }

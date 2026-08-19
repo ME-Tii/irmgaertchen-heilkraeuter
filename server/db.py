@@ -600,6 +600,33 @@ def set_admin_role(username):
     conn.close()
 
 
+def list_all_customers():
+    conn = get_conn()
+    rows = conn.execute(
+        _sql(
+            "SELECT u.id, u.username, u.email, u.name, u.phone, u.role, u.created_at, "
+            "COUNT(o.id) AS order_count, "
+            "COALESCE(SUM(o.total_cents), 0) AS total_spent_cents, "
+            "MAX(o.created_at) AS last_order_at "
+            "FROM users u "
+            "LEFT JOIN orders o ON o.user_id = u.id "
+            "GROUP BY u.id "
+            "ORDER BY u.created_at DESC"
+        )
+    ).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows]
+
+
+def get_customer_orders(user_id):
+    conn = get_conn()
+    rows = conn.execute(
+        _sql("SELECT * FROM orders WHERE user_id = %s ORDER BY created_at DESC"), (user_id,)
+    ).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows]
+
+
 # ---- sessions ----
 
 def _now_iso():

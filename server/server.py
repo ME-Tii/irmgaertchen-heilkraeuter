@@ -1457,6 +1457,65 @@ def admin_delete_product(slug):
     return jsonify({"ok": True})
 
 
+# ---- admin customers ----
+
+
+@app.get("/api/admin/customers")
+def admin_list_customers():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    customers = db.list_all_customers()
+    out = []
+    for c in customers:
+        out.append({
+            "id": c["id"],
+            "username": c["username"],
+            "email": c["email"],
+            "name": c["name"],
+            "phone": c["phone"],
+            "role": c["role"],
+            "created_at": c["created_at"],
+            "order_count": c["order_count"],
+            "total_spent": round(c["total_spent_cents"] / 100, 2),
+            "last_order_at": c["last_order_at"],
+        })
+    return jsonify({"customers": out})
+
+
+@app.get("/api/admin/customers/<int:user_id>")
+def admin_get_customer(user_id):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    user = db.get_user_by_id(user_id)
+    if not user:
+        return err("Kunde nicht gefunden.", 404)
+    orders = db.get_customer_orders(user_id)
+    order_list = []
+    for o in orders:
+        d = order_to_dict(o)
+        order_list.append({
+            "order_no": d["order_no"],
+            "created_at": d["created_at"],
+            "total": d["total"],
+            "status": d["status"],
+            "items": d["items"],
+        })
+    return jsonify({
+        "customer": {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"],
+            "name": user["name"],
+            "phone": user["phone"],
+            "role": user["role"],
+            "created_at": user["created_at"],
+        },
+        "orders": order_list,
+    })
+
+
 # ---------------------------------------------------------------- misc
 
 @app.get("/api/admin/stats")
