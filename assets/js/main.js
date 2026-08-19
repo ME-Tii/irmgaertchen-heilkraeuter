@@ -2,6 +2,7 @@ const CART_KEY = "irmgaertchen_cart";
 const TOKEN_KEY = "irm_api_token";
 const USER_KEY = "irm_api_user";
 const COOKIE_KEY = "irm_cookie_consent";
+const CONSENT_KEY = "irm_newsletter_consent";
 
 function initCookieBanner() {
   if (localStorage.getItem(COOKIE_KEY)) return;
@@ -498,6 +499,7 @@ function handleGoogleReturn() {
     document.querySelectorAll(".checkout-login-required").forEach((el) => {
       el.classList.remove("d-none");
     });
+    checkNewsletterConsent();
     return;
   }
   const err = hash.get("google_error");
@@ -903,6 +905,70 @@ function afterAuthSuccess(message) {
   document.querySelectorAll(".checkout-login-required").forEach((el) => {
     el.classList.remove("d-none");
   });
+  checkNewsletterConsent();
+}
+
+function checkNewsletterConsent() {
+  if (!currentUser()) return;
+  if (localStorage.getItem(CONSENT_KEY)) return;
+  api("api/me")
+    .then((me) => {
+      if (me.newsletter_consented) {
+        localStorage.setItem(CONSENT_KEY, "1");
+        return;
+      }
+      showNewsletterConsentModal();
+    })
+    .catch(() => {});
+}
+
+function showNewsletterConsentModal() {
+  if (document.getElementById("newsletterConsentModal")) {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("newsletterConsentModal")).show();
+    return;
+  }
+  const modal = document.createElement("div");
+  modal.className = "modal fade";
+  modal.id = "newsletterConsentModal";
+  modal.tabIndex = -1;
+  modal.setAttribute("aria-hidden", "true");
+  modal.innerHTML =
+    '<div class="modal-dialog modal-dialog-centered">' +
+    '<div class="modal-content">' +
+    '<div class="modal-header">' +
+    '<h5 class="modal-title"><i class="bi bi-envelope-heart"></i> Newsletter</h5>' +
+    '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>' +
+    "</div>" +
+    '<div class="modal-body">' +
+    '<p>Möchten Sie unseren Newsletter erhalten? Wir informieren Sie über neue Kräuter, Angebote und Tipps aus dem Garten.</p>' +
+    '<p class="text-muted small mb-0">Sie können Ihre Einwilligung jederzeit in Ihren Kontoeinstellungen widerrufen.</p>' +
+    "</div>" +
+    '<div class="modal-footer">' +
+    '<button type="button" class="btn btn-outline-secondary" id="consentDecline">Nein, danke</button>' +
+    '<button type="button" class="btn btn-irm" id="consentAccept"><i class="bi bi-check-lg"></i> Ja, Newsletter abonnieren</button>' +
+    "</div></div></div>";
+  document.body.appendChild(modal);
+
+  modal.querySelector("#consentAccept").addEventListener("click", function () {
+    api("api/me/newsletter-consent", "POST", { consented: true })
+      .then(() => {
+        localStorage.setItem(CONSENT_KEY, "1");
+        bootstrap.Modal.getOrCreateInstance(modal).hide();
+        showToast("Vielen Dank! Sie sind jetzt für den Newsletter angemeldet.");
+      })
+      .catch(() => showToast("Fehler beim Speichern.", "danger"));
+  });
+
+  modal.querySelector("#consentDecline").addEventListener("click", function () {
+    api("api/me/newsletter-consent", "POST", { consented: false })
+      .then(() => {
+        localStorage.setItem(CONSENT_KEY, "1");
+        bootstrap.Modal.getOrCreateInstance(modal).hide();
+      })
+      .catch(() => showToast("Fehler beim Speichern.", "danger"));
+  });
+
+  bootstrap.Modal.getOrCreateInstance(modal).show();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -915,6 +981,7 @@ document.addEventListener("DOMContentLoaded", () => {
   handleOrderSuccessPage();
   handleGoogleReturn();
   initGoogleLogin();
+  checkNewsletterConsent();
 
   const productAddBtn = document.getElementById("productAddToCart");
   if (productAddBtn) {

@@ -549,6 +549,7 @@ def login():
             "name": user["name"],
             "phone": user["phone"],
             "role": user["role"],
+            "newsletter_consented": user["newsletter_consented"],
         }
     )
 
@@ -635,6 +636,7 @@ def me():
             "name": user["name"],
             "phone": user["phone"],
             "role": user["role"],
+            "newsletter_consented": user["newsletter_consented"],
         }
     )
 
@@ -652,6 +654,19 @@ def update_me():
         return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
     db.update_profile(user["id"], name, email, phone)
     return jsonify({"ok": True})
+
+
+@app.post("/api/me/newsletter-consent")
+def set_newsletter_consent():
+    user = require_auth()
+    if not user:
+        return err("Nicht angemeldet.", 401)
+    data = request.get_json(silent=True) or {}
+    consented = 1 if data.get("consented") else 0
+    db.set_newsletter_consented(user["id"], consented)
+    if consented:
+        db.set_user_newsletter(user["id"], 1)
+    return jsonify({"ok": True, "newsletter_consented": consented})
 
 
 # ---------------------------------------------------------------- password reset

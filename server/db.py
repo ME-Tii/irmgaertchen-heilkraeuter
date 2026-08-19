@@ -51,6 +51,7 @@ SQLITE_SCHEMA = [
         phone TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'customer',
         newsletter INTEGER NOT NULL DEFAULT 0,
+        newsletter_consented INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
     """CREATE TABLE IF NOT EXISTS sessions (
@@ -229,6 +230,7 @@ PG_SCHEMA = [
         phone TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'customer',
         newsletter INTEGER NOT NULL DEFAULT 0,
+        newsletter_consented INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
     """CREATE TABLE IF NOT EXISTS sessions (
@@ -518,6 +520,11 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE users ADD COLUMN newsletter_consented INTEGER NOT NULL DEFAULT 0"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
     prune_sessions(conn)
     for slug, info in CATALOG.items():
         conn.execute(
@@ -595,6 +602,26 @@ def update_profile(user_id, name, email, phone):
     conn.execute(
         _sql("UPDATE users SET name = %s, email = %s, phone = %s WHERE id = %s"),
         (name, email, phone, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_newsletter_consented(user_id, value):
+    conn = get_conn()
+    conn.execute(
+        _sql("UPDATE users SET newsletter_consented = %s WHERE id = %s"),
+        (int(bool(value)), user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_user_newsletter(user_id, value):
+    conn = get_conn()
+    conn.execute(
+        _sql("UPDATE users SET newsletter = %s WHERE id = %s"),
+        (int(bool(value)), user_id),
     )
     conn.commit()
     conn.close()
