@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import gzip
 import time
 import urllib.request
 import urllib.error
@@ -54,6 +55,7 @@ def _request(method, path, body=None):
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "Accept-Encoding": "identity",
     }
     data = None
     if body is not None:
@@ -62,12 +64,25 @@ def _request(method, path, body=None):
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read()
+            ce = resp.headers.get("Content-Encoding", "")
+            if ce == "gzip":
+                raw = gzip.decompress(raw)
+            elif ce == "deflate":
+                import zlib
+                raw = zlib.decompress(raw)
             content_type = resp.headers.get("Content-Type", "")
             if "application/pdf" in content_type or "application/octet-stream" in content_type:
                 return {"_binary": raw}
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace")
+        err_raw = e.read()
+        ce = e.headers.get("Content-Encoding", "") if e.headers else ""
+        if ce == "gzip":
+            err_raw = gzip.decompress(err_raw)
+        elif ce == "deflate":
+            import zlib
+            err_raw = zlib.decompress(err_raw)
+        err_body = err_raw.decode("utf-8", errors="replace")
         print(f"[fedex] HTTP {e.code} {method} {path}: {err_body}")
         raise RuntimeError(f"FedEx API error {e.code}: {err_body}")
     except Exception as ex:
