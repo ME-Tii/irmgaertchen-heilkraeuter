@@ -1599,7 +1599,7 @@ def log_newsletter_send(recipient_count):
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     conn.execute(
         _sql("INSERT INTO mail_log (recipient, subject, ok, error, created_at) VALUES (%s, %s, %s, %s, %s)"),
-        ("[newsletter]", f"Newsletter an {recipient_count} Empfänger", True, "", now),
+        ("[newsletter]", f"Newsletter an {recipient_count} Empfänger", 1, "", now),
     )
     conn.commit()
     conn.close()
