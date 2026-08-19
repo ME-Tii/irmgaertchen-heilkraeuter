@@ -3050,6 +3050,7 @@ function renderCustomers() {
       "<td>" + esc(c.phone || "–") + "</td>" +
       "<td><small class=\"text-muted\">" + esc(c.username) + "</small></td>" +
       "<td>" + roleBadge + "</td>" +
+      "<td>" + (c.newsletter ? '<span class="badge bg-success">Ja</span>' : '<span class="badge bg-secondary">Nein</span>') + "</td>" +
       "<td>" + (c.order_count || 0) + "</td>" +
       "<td>" + fmtMoney(c.total_spent) + "</td>" +
       "<td><small class=\"text-muted\">" + regDate + "</small></td>" +
@@ -3121,6 +3122,7 @@ function showCustomerDetail(userId) {
         "</div>" +
         '<div class="col-md-6">' +
         '<div class="mb-2"><span class="text-muted small">Rolle:</span> ' + roleBadge + "</div>" +
+        '<div class="mb-2"><span class="text-muted small">Newsletter:</span> ' + (c.newsletter ? '<span class="badge bg-success">Ja</span>' : '<span class="badge bg-secondary">Nein</span>') + "</div>" +
         '<div class="mb-2"><span class="text-muted small">Registriert:</span> ' + regDate + "</div>" +
         '<div class="mb-2"><span class="text-muted small">Bestellungen:</span> <strong>' + orders.length + "</strong></div>" +
         '<div class="mb-2"><span class="text-muted small">Gesamtumsatz:</span> <strong class="text-irm">' + fmtMoney(orders.reduce(function(s, o) { return s + (o.total || 0); }, 0)) + "</strong></div>" +

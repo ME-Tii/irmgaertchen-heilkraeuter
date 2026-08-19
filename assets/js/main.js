@@ -452,12 +452,12 @@ function logout() {
   renderProfile();
 }
 
-function doRegister(username, password, email) {
+function doRegister(username, password, email, newsletter) {
   username = (username || "").trim();
   if (!username || !password || password.length < 6) {
     return Promise.reject(new Error("Bitte Benutzername und ein Passwort mit mindestens 6 Zeichen angeben."));
   }
-  return api("api/register", "POST", { username, password, email }).then((data) => {
+  return api("api/register", "POST", { username, password, email, newsletter: !!newsletter }).then((data) => {
     setSession(data);
     return data;
   });
@@ -1103,7 +1103,8 @@ document.addEventListener("DOMContentLoaded", () => {
       doRegister(
         document.getElementById("regUser").value,
         pass,
-        document.getElementById("regEmail").value
+        document.getElementById("regEmail").value,
+        document.getElementById("regNewsletter")?.checked
       )
         .then(() => {
           const name = document.getElementById("regName");

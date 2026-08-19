@@ -522,7 +522,8 @@ def register():
         return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
     if db.get_user_by_username(username):
         return err("Dieser Benutzername ist bereits vergeben.", 400)
-    user_id = db.create_user(username, email, generate_password_hash(password))
+    newsletter = 1 if data.get("newsletter") else 0
+    user_id = db.create_user(username, email, generate_password_hash(password), newsletter)
     token = secrets.token_hex(32)
     db.create_session(token, user_id)
     return jsonify({"token": token, "username": username, "email": email})
@@ -745,6 +746,8 @@ def create_checkout_session():
     delivery = bool(data.get("delivery"))
     addr = data.get("shipping_address") or {}
     phone = (data.get("phone") or "").strip() or (user.get("phone") or "").strip()
+    if not phone:
+        return err("Bitte geben Sie eine Telefonnummer an.", 400)
     customer_name = (data.get("name") or "").strip() or (user.get("name") or "").strip()
     customer_email = (user.get("email") or "").strip()
 
@@ -1475,6 +1478,7 @@ def admin_list_customers():
             "name": c["name"],
             "phone": c["phone"],
             "role": c["role"],
+            "newsletter": c["newsletter"],
             "created_at": c["created_at"],
             "order_count": c["order_count"],
             "total_spent": round(c["total_spent_cents"] / 100, 2),
@@ -1510,6 +1514,7 @@ def admin_get_customer(user_id):
             "name": user["name"],
             "phone": user["phone"],
             "role": user["role"],
+            "newsletter": user["newsletter"],
             "created_at": user["created_at"],
         },
         "orders": order_list,

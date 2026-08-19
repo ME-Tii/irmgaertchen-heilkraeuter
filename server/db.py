@@ -50,6 +50,7 @@ SQLITE_SCHEMA = [
         name TEXT NOT NULL DEFAULT '',
         phone TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'customer',
+        newsletter INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
     """CREATE TABLE IF NOT EXISTS sessions (
@@ -227,6 +228,7 @@ PG_SCHEMA = [
         name TEXT NOT NULL DEFAULT '',
         phone TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'customer',
+        newsletter INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
     """CREATE TABLE IF NOT EXISTS sessions (
@@ -511,6 +513,11 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE users ADD COLUMN newsletter INTEGER NOT NULL DEFAULT 0"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
     prune_sessions(conn)
     for slug, info in CATALOG.items():
         conn.execute(
@@ -571,11 +578,11 @@ def get_user_by_id(user_id):
     return row_to_dict(row)
 
 
-def create_user(username, email, password_hash):
+def create_user(username, email, password_hash, newsletter=0):
     conn = get_conn()
     cur = conn.execute(
-        _sql("INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)") + _ret_id(),
-        (username, email, password_hash),
+        _sql("INSERT INTO users (username, email, password_hash, newsletter) VALUES (%s, %s, %s, %s)") + _ret_id(),
+        (username, email, password_hash, int(bool(newsletter))),
     )
     user_id = _insert_id(cur)
     conn.commit()
@@ -604,7 +611,7 @@ def list_all_customers():
     conn = get_conn()
     rows = conn.execute(
         _sql(
-            "SELECT u.id, u.username, u.email, u.name, u.phone, u.role, u.created_at, "
+            "SELECT u.id, u.username, u.email, u.name, u.phone, u.role, u.newsletter, u.created_at, "
             "COUNT(o.id) AS order_count, "
             "COALESCE(SUM(o.total_cents), 0) AS total_spent_cents, "
             "MAX(o.created_at) AS last_order_at "
