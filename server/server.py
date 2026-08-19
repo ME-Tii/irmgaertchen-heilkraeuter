@@ -251,6 +251,12 @@ def order_to_dict(order):
     d["refunded"] = bool(d.pop("refunded"))
     d["refundedAt"] = d.pop("refunded_at")
     d["stripeRefundId"] = d.pop("stripe_refund_id")
+    d["dhlStatus"] = d.pop("dhl_status", "") or ""
+    d["dhlTracking"] = d.pop("dhl_tracking_number", "") or ""
+    d["dhlProduct"] = d.pop("dhl_product", "") or ""
+    d.pop("dhl_shopping_cart_id", None)
+    d.pop("dhl_notify_token", None)
+    d.pop("dhl_label_pdf", None)
     return d
 
 
@@ -1395,6 +1401,156 @@ def admin_newsletter_send():
         print(f"[newsletter] Send-Fehler: {e}")
         import traceback; traceback.print_exc()
         return err(f"Senden fehlgeschlagen: {e}", 500)
+
+
+# ---- DHL Shipping Labels ----
+
+import dhl as dhl_api
+
+DHL_PRODUCTS = [
+    {"code": "V01PAK", "name": "DHL Paket", "max_weight_g": 31500},
+    {"code": "V53WPAK", "name": "DHL Paket Connect", "max_weight_g": 31500},
+    {"code": "V01EPAK", "name": "DHL Paket International", "max_weight_g": 31500},
+]
+
+
+@app.get("/api/admin/dhl/config")
+def admin_dhl_config_get():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify(db.get_dhl_config() or {})
+
+
+@app.post("/api/admin/dhl/config")
+def admin_dhl_config_save():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    db.save_dhl_config(data)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/admin/dhl/products")
+def admin_dhl_products():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify(DHL_PRODUCTS)
+
+
+@app.post("/api/admin/orders/<order_no>/dhl-label")
+def admin_dhl_create_label(order_no):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    if not dhl_api.enabled():
+        return err("DHL API-Key nicht konfiguriert.", 400)
+    order = db.get_order(order_no)
+    if not order:
+        return err("Bestellung nicht gefunden.", 404)
+    if order.get("delivery_method") != "delivery":
+        return err("Nur Lieferbestellungen können ein DHL-Label erhalten.", 400)
+    if order.get("dhl_status") == "paid":
+        return err("Label wurde bereits erstellt und bezahlt.", 400)
+    config = db.get_dhl_config()
+    if not config or not config.get("sender_name"):
+        return err("DHL Absenderadresse nicht konfiguriert.", 400)
+
+    product = (request.get_json(silent=True) or {}).get("product", "V01PAK")
+    token = secrets.token_hex(32)
+    site_url = os.environ.get("DOMAIN", "https://irmgaertchen.de").rstrip("/")
+
+    try:
+        result = dhl_api.create_shopping_cart(order, config, product=product, notify_token=token, site_url=site_url)
+    except Exception as e:
+        print(f"[dhl] Fehler beim Erellen des Warenkorbs: {e}")
+        return err(f"DHL API Fehler: {e}", 500)
+
+    cart_id = result.get("shopping_cart_id", "")
+    entry_url = result.get("entry_url", "")
+
+    db.update_order_dhl(
+        order_no,
+        dhl_shopping_cart_id=cart_id,
+        dhl_notify_token=token,
+        dhl_status="pending",
+        dhl_product=product,
+    )
+
+    return jsonify({"entry_url": entry_url, "shopping_cart_id": cart_id})
+
+
+@app.get("/api/admin/dhl-notify/<token>")
+def admin_dhl_notify(token):
+    shopping_cart_id_param = request.args.get("shoppingCartId", "")
+    order_no = db.find_order_by_notify_token(token)
+    if not order_no:
+        print(f"[dhl] Notify-Token nicht gefunden: {token[:16]}...")
+        return "OK", 200
+
+    order = db.get_order(order_no)
+    if not order:
+        return "OK", 200
+
+    cart_id = order.get("dhl_shopping_cart_id", "") or shopping_cart_id_param
+    if not cart_id:
+        return "OK", 200
+
+    try:
+        cart = dhl_api.get_cart_status(cart_id)
+        items = cart.get("items", [])
+        tracking = ""
+        for item in items:
+            t = item.get("trackingNumber", "") or item.get("parcelno", "")
+            if t:
+                tracking = t
+                break
+
+        label_result = dhl_api.get_label(cart_id)
+        if isinstance(label_result, dict) and label_result.get("pdf"):
+            db.set_order_label_pdf(order_no, label_result["pdf"])
+        else:
+            db.update_order_dhl(
+                order_no,
+                dhl_status="paid",
+                dhl_tracking_number=tracking or (label_result.get("tracking", "") if isinstance(label_result, dict) else ""),
+            )
+
+        if tracking:
+            db.update_order_dhl(order_no, dhl_tracking_number=tracking)
+
+        db.update_order_dhl(order_no, dhl_notify_token="")
+    except Exception as e:
+        print(f"[dhl] Notify-Verarbeitung fehlgeschlagen für {order_no}: {e}")
+        db.update_order_dhl(order_no, dhl_status="error")
+
+    return "OK", 200
+
+
+@app.get("/api/admin/orders/<order_no>/dhl-label")
+def admin_dhl_download_label(order_no):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    pdf = db.get_order_label_pdf(order_no)
+    if not pdf:
+        return err("Label nicht verfügbar.", 404)
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="DHL-Label-{order_no}.pdf"'},
+    )
+
+
+@app.get("/api/admin/orders/<order_no>/dhl-status")
+def admin_dhl_order_status(order_no):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    dhl = db.get_order_dhl(order_no)
+    return jsonify(dhl or {"dhl_status": "", "dhl_tracking_number": "", "dhl_product": ""})
 
 
 @app.get("/api/admin/products")

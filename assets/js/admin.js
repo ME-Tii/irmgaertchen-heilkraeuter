@@ -156,6 +156,7 @@ function switchTab(tab) {
     if (tab === "fieldplan") loadFieldPlans();
     if (tab === "coupons") renderCoupons();
     if (tab === "emails") loadEmailTemplates();
+    if (tab === "backup") loadDhlConfig();
   } catch (e) {
     console.error("Tab-Fehler:", e);
     showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
@@ -391,6 +392,18 @@ function renderDashboard() {
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
         '<td class="text-end">' +
         '<button class="btn btn-sm btn-outline-primary me-1 invoice-download" data-order="' + esc(o.order_no) + '" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i></button>' +
+        (isShipping && o.dhlStatus !== "paid"
+          ? '<button class="btn btn-sm btn-outline-success me-1 dhl-create" data-order="' + esc(o.order_no) + '" title="DHL Label erstellen"><i class="bi bi-box-seam"></i></button> '
+          : "") +
+        (isShipping && o.dhlStatus === "paid"
+          ? '<button class="btn btn-sm btn-outline-success me-1 dhl-download" data-order="' + esc(o.order_no) + '" title="DHL Label herunterladen"><i class="bi bi-box-seam"></i></button> '
+          : "") +
+        (isShipping && o.dhlTracking
+          ? '<span class="badge text-bg-success small me-1" title="Tracking: ' + esc(o.dhlTracking) + '"><i class="bi bi-truck"></i> ' + esc(o.dhlTracking.substring(0, 8)) + '…</span> '
+          : "") +
+        (isShipping && o.dhlStatus === "pending"
+          ? '<span class="badge text-bg-warning small me-1" title="DHL Label wartet auf Bezahlung"><i class="bi bi-hourglass-split"></i> DHL ausstehend</span> '
+          : "") +
         (o.returnRequested && !o.returnProcessed
           ? '<button class="btn btn-sm btn-outline-warning return-done" data-order="' + esc(o.order_no) + '" title="Rückgabe als erledigt markieren"><i class="bi bi-check2-circle"></i></button> '
           : "") +
@@ -445,6 +458,32 @@ function renderDashboard() {
   body.querySelectorAll(".refund-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       refundOrder(btn.dataset.order, btn);
+    });
+  });
+  body.querySelectorAll(".dhl-create").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const orderNo = btn.dataset.order;
+      const product = "V01PAK";
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      adminApi("api/admin/orders/" + encodeURIComponent(orderNo) + "/dhl-label", "POST", { product: product })
+        .then((data) => {
+          if (data.entry_url) {
+            window.open(data.entry_url, "_blank");
+            showMsg("ordersMsg", "DHL Warenkorb erstellt. Bitte im neuen Tab bezahlen.", "success");
+          }
+          loadDashboard();
+        })
+        .catch((err) => {
+          showMsg("ordersMsg", "DHL Fehler: " + err.message, "danger");
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-box-seam"></i>';
+        });
+    });
+  });
+  body.querySelectorAll(".dhl-download").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      adminDownloadFile("/api/admin/orders/" + encodeURIComponent(btn.dataset.order) + "/dhl-label", "DHL-Label-" + btn.dataset.order + ".pdf");
     });
   });
   body.querySelectorAll(".copy-address").forEach((el) => {
@@ -1336,6 +1375,45 @@ function showToast(message) {
   const toast = new bootstrap.Toast(wrapper, { delay: 2500 });
   toast.show();
   wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
+}
+
+// ---------------------------------------------------------------- DHL config
+
+function loadDhlConfig() {
+  adminApi("api/admin/dhl/config")
+    .then((cfg) => {
+      document.getElementById("dhlSenderName").value = cfg.sender_name || "";
+      document.getElementById("dhlSenderStreet").value = cfg.sender_street || "";
+      document.getElementById("dhlSenderNumber").value = cfg.sender_number || "";
+      document.getElementById("dhlSenderPlz").value = cfg.sender_plz || "";
+      document.getElementById("dhlSenderCity").value = cfg.sender_city || "";
+      document.getElementById("dhlSenderEmail").value = cfg.sender_email || "";
+      document.getElementById("dhlSenderPhone").value = cfg.sender_phone || "";
+    })
+    .catch(() => {});
+}
+
+function saveDhlConfig(e) {
+  e.preventDefault();
+  const data = {
+    sender_name: document.getElementById("dhlSenderName").value.trim(),
+    sender_street: document.getElementById("dhlSenderStreet").value.trim(),
+    sender_number: document.getElementById("dhlSenderNumber").value.trim(),
+    sender_plz: document.getElementById("dhlSenderPlz").value.trim(),
+    sender_city: document.getElementById("dhlSenderCity").value.trim(),
+    sender_email: document.getElementById("dhlSenderEmail").value.trim(),
+    sender_phone: document.getElementById("dhlSenderPhone").value.trim(),
+  };
+  adminApi("api/admin/dhl/config", "POST", data)
+    .then(() => {
+      document.getElementById("dhlConfigMsg").textContent = "Gespeichert.";
+      document.getElementById("dhlConfigMsg").className = "ms-2 small text-success";
+      setTimeout(() => { document.getElementById("dhlConfigMsg").textContent = ""; }, 2000);
+    })
+    .catch((err) => {
+      document.getElementById("dhlConfigMsg").textContent = err.message || "Fehler";
+      document.getElementById("dhlConfigMsg").className = "ms-2 small text-danger";
+    });
 }
 
 // ---------------------------------------------------------------- backup
@@ -3253,3 +3331,8 @@ function showCustomerDetail(userId) {
       body.innerHTML = '<div class="alert alert-danger">' + esc(err.message) + "</div>";
     });
 }
+
+document.addEventListener("DOMContentLoaded", function() {
+  var dhlForm = document.getElementById("dhlConfigForm");
+  if (dhlForm) dhlForm.addEventListener("submit", saveDhlConfig);
+});

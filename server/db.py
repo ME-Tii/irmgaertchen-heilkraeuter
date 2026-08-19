@@ -551,6 +551,51 @@ def init_db():
             (info.get("image", ""), slug),
         )
     conn.commit()
+    # ---- DHL shipping label columns
+    for col in ("dhl_shopping_cart_id", "dhl_notify_token", "dhl_label_pdf", "dhl_tracking_number", "dhl_status", "dhl_product"):
+        try:
+            if col == "dhl_label_pdf":
+                if USE_PG:
+                    conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} BYTEA"))
+                else:
+                    conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} BLOB"))
+            elif col == "dhl_status":
+                conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"))
+            else:
+                conn.execute(_sql(f"ALTER TABLE orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    try:
+        if USE_PG:
+            conn.execute(_sql(
+                "CREATE TABLE IF NOT EXISTS dhl_config ("
+                "id INTEGER PRIMARY KEY DEFAULT 1, "
+                "sender_name TEXT NOT NULL DEFAULT '', "
+                "sender_street TEXT NOT NULL DEFAULT '', "
+                "sender_number TEXT NOT NULL DEFAULT '', "
+                "sender_plz TEXT NOT NULL DEFAULT '', "
+                "sender_city TEXT NOT NULL DEFAULT '', "
+                "sender_email TEXT NOT NULL DEFAULT '', "
+                "sender_phone TEXT NOT NULL DEFAULT '', "
+                "updated_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'))"
+            ))
+        else:
+            conn.execute(_sql(
+                "CREATE TABLE IF NOT EXISTS dhl_config ("
+                "id INTEGER PRIMARY KEY DEFAULT 1, "
+                "sender_name TEXT NOT NULL DEFAULT '', "
+                "sender_street TEXT NOT NULL DEFAULT '', "
+                "sender_number TEXT NOT NULL DEFAULT '', "
+                "sender_plz TEXT NOT NULL DEFAULT '', "
+                "sender_city TEXT NOT NULL DEFAULT '', "
+                "sender_email TEXT NOT NULL DEFAULT '', "
+                "sender_phone TEXT NOT NULL DEFAULT '', "
+                "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+            ))
+        conn.commit()
+    except Exception:
+        conn.rollback()
     seed_products(conn)
     conn.commit()
     seed_plant_catalog(conn)
@@ -1689,6 +1734,7 @@ BACKUP_TABLES = [
     "crop_rotation_history",
     "email_templates",
     "site_settings",
+    "dhl_config",
 ]
 
 
@@ -1730,3 +1776,95 @@ def import_all_tables(data):
         raise
     finally:
         conn.close()
+
+
+# ---- DHL Shipping ----
+
+def get_dhl_config():
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM dhl_config WHERE id = 1")).fetchone()
+    conn.close()
+    if row:
+        return row_to_dict(row)
+    return {}
+
+
+def save_dhl_config(data):
+    conn = get_conn()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    existing = get_dhl_config()
+    if existing:
+        conn.execute(
+            _sql(
+                "UPDATE dhl_config SET sender_name=%s, sender_street=%s, sender_number=%s, "
+                "sender_plz=%s, sender_city=%s, sender_email=%s, sender_phone=%s, updated_at=%s WHERE id=1"
+            ),
+            (data.get("sender_name", ""), data.get("sender_street", ""), data.get("sender_number", ""),
+             data.get("sender_plz", ""), data.get("sender_city", ""), data.get("sender_email", ""),
+             data.get("sender_phone", ""), now),
+        )
+    else:
+        conn.execute(
+            _sql(
+                "INSERT INTO dhl_config (id, sender_name, sender_street, sender_number, "
+                "sender_plz, sender_city, sender_email, sender_phone, updated_at) "
+                "VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s)"
+            ),
+            (data.get("sender_name", ""), data.get("sender_street", ""), data.get("sender_number", ""),
+             data.get("sender_plz", ""), data.get("sender_city", ""), data.get("sender_email", ""),
+             data.get("sender_phone", ""), now),
+        )
+    conn.commit()
+    conn.close()
+
+
+def update_order_dhl(order_no, **kwargs):
+    conn = get_conn()
+    sets = []
+    vals = []
+    for k, v in kwargs.items():
+        if k in ("dhl_shopping_cart_id", "dhl_notify_token", "dhl_tracking_number", "dhl_status", "dhl_product", "dhl_label_pdf"):
+            sets.append(f"{k} = %s")
+            vals.append(v)
+    if sets:
+        vals.append(order_no)
+        conn.execute(_sql(f"UPDATE orders SET {', '.join(sets)} WHERE order_no = %s"), vals)
+        conn.commit()
+    conn.close()
+
+
+def get_order_dhl(order_no):
+    conn = get_conn()
+    row = conn.execute(
+        _sql("SELECT dhl_shopping_cart_id, dhl_tracking_number, dhl_status, dhl_product FROM orders WHERE order_no = %s"),
+        (order_no,),
+    ).fetchone()
+    conn.close()
+    return row_to_dict(row) if row else {}
+
+
+def get_order_label_pdf(order_no):
+    conn = get_conn()
+    row = conn.execute(
+        _sql("SELECT dhl_label_pdf FROM orders WHERE order_no = %s"),
+        (order_no,),
+    ).fetchone()
+    conn.close()
+    return row["dhl_label_pdf"] if row and row["dhl_label_pdf"] else None
+
+
+def set_order_label_pdf(order_no, pdf_bytes):
+    conn = get_conn()
+    conn.execute(_sql("UPDATE orders SET dhl_label_pdf = %s, dhl_status = 'paid' WHERE order_no = %s"), (pdf_bytes, order_no))
+    conn.commit()
+    conn.close()
+
+
+def find_order_by_notify_token(token):
+    conn = get_conn()
+    row = conn.execute(
+        _sql("SELECT order_no FROM orders WHERE dhl_notify_token = %s AND dhl_status = 'pending'"),
+        (token,),
+    ).fetchone()
+    conn.close()
+    return row["order_no"] if row else None
