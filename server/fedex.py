@@ -90,7 +90,7 @@ def _request(method, path, body=None):
         raise
 
 
-def create_shipment(order, config, service="FEDEX_EXPRESS_SAVER"):
+def create_shipment(order, config, service="FEDEX_INTERNATIONAL_PRIORITY"):
     items = json.loads(order.get("items_json", "[]")) if isinstance(order.get("items_json"), str) else order.get("items_json", [])
     weight_kg = max(0.5, len(items) * 0.5)
 

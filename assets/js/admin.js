@@ -460,7 +460,7 @@ function renderDashboard() {
   body.querySelectorAll(".fedex-create").forEach((btn) => {
     btn.addEventListener("click", () => {
       const orderNo = btn.dataset.order;
-      const service = "FEDEX_EXPRESS_SAVER";
+      const service = "FEDEX_INTERNATIONAL_PRIORITY";
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
       adminApi("api/admin/orders/" + encodeURIComponent(orderNo) + "/dhl-label", "POST", { product: service })
