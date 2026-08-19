@@ -1356,6 +1356,10 @@ def admin_newsletter_preview():
         return bad
     harvests = db.get_upcoming_harvests(14)
     html = mailer.build_newsletter_html("Vorschau", harvests, email="vorschau@irmgaertchen.de")
+    if mailer._LOGO_BYTES:
+        import base64
+        data_uri = "data:image/png;base64," + base64.b64encode(mailer._LOGO_BYTES).decode()
+        html = html.replace('/assets/img/logo-irmgaertchen_weiss.png"', data_uri + '"')
     import re
     body_match = re.search(r"<body[^>]*>(.*)</body>", html, re.DOTALL)
     body_html = body_match.group(1) if body_match else html
