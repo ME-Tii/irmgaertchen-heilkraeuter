@@ -408,6 +408,8 @@ def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de"):
         '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">'
         '<!-- header -->'
         '<tr><td style="background:#3f6b3b;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;">'
+        '<img src="https://irmgaertchen.de/assets/img/logo-irmgaertchen_weiss.png" '
+        'alt="Irmg&auml;rtchen" width="120" style="display:block;margin:0 auto 12px;max-width:120px;height:auto;">'
         '<h1 style="margin:0;color:#fff;font-size:22px;">Irmg&auml;rtchen Heilkr&auml;uter</h1>'
         '<p style="margin:6px 0 0;color:#c8e6c9;font-size:13px;">Newsletter &middot; Ernte-News &amp; Tipps</p>'
         '</td></tr>'
