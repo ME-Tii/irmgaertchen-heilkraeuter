@@ -850,9 +850,12 @@ function renderTimeline() {
     var left = Math.max(0, (s.getTime() - minDate.getTime()) / range * 100);
     var width = Math.max(2, (e.getTime() - s.getTime()) / range * 100);
     if (left + width > 100) width = 100 - left;
+    var labelOutside = width < 12;
     barsHtml += '<div class="position-relative mb-1" style="height:24px;">' +
       '<div class="position-absolute rounded" style="left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + esc(it.color) + ';opacity:0.85;"></div>' +
-      '<span class="position-absolute small text-truncate" style="left:' + Math.max(0, left + 0.5) + '%;top:3px;line-height:18px;max-width:' + Math.max(5, width - 1) + '%;color:#fff;padding-left:4px;font-weight:500;">' + esc(it.name) + '</span>' +
+      (labelOutside
+        ? '<span class="position-absolute small" style="left:' + (left + width + 0.5) + '%;top:3px;line-height:18px;color:#000;white-space:nowrap;font-weight:500;padding-left:4px;">' + esc(it.name) + '</span>'
+        : '<span class="position-absolute small text-truncate" style="left:' + Math.max(0, left + 0.5) + '%;top:3px;line-height:18px;max-width:' + Math.max(5, width - 1) + '%;color:#fff;padding-left:4px;font-weight:500;">' + esc(it.name) + '</span>') +
       '</div>';
   });
   el.innerHTML = headerHtml + barsHtml;
