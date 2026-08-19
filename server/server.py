@@ -1287,6 +1287,49 @@ def admin_delete_coupon(coupon_id):
     return jsonify({"ok": True})
 
 
+# ---- admin email templates ----
+
+
+@app.get("/api/admin/email-templates")
+def admin_list_email_templates():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify({"templates": db.list_email_templates()})
+
+
+@app.get("/api/admin/email-templates/<key>")
+def admin_get_email_template(key):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    tpl = db.get_email_template(key)
+    if not tpl:
+        return err("Vorlage nicht gefunden.", 404)
+    return jsonify({"template": tpl})
+
+
+@app.put("/api/admin/email-templates/<key>")
+def admin_update_email_template(key):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    tpl = db.get_email_template(key)
+    if not tpl:
+        return err("Vorlage nicht gefunden.", 404)
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    if "subject" in data:
+        fields["subject"] = _clean_text(data["subject"], 500)
+    if "body" in data:
+        fields["body"] = _clean_text(data["body"], 5000)
+    if "enabled" in data:
+        fields["enabled"] = 1 if data["enabled"] else 0
+    if fields:
+        db.update_email_template(key, fields)
+    return jsonify({"ok": True})
+
+
 @app.get("/api/admin/products")
 def admin_products():
     bad = _admin_ok(require_admin())

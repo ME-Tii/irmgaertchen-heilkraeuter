@@ -137,6 +137,7 @@ function switchTab(tab) {
   const fieldplanPanel = document.getElementById("fieldplanPanel");
   const backupPanel = document.getElementById("backupPanel");
   const couponsPanel = document.getElementById("couponsPanel");
+  const emailsPanel = document.getElementById("emailsPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
   if (messagesPanel) messagesPanel.classList.toggle("d-none", tab !== "messages");
@@ -144,12 +145,14 @@ function switchTab(tab) {
   if (fieldplanPanel) fieldplanPanel.classList.toggle("d-none", tab !== "fieldplan");
   if (backupPanel) backupPanel.classList.toggle("d-none", tab !== "backup");
   if (couponsPanel) couponsPanel.classList.toggle("d-none", tab !== "coupons");
+  if (emailsPanel) emailsPanel.classList.toggle("d-none", tab !== "emails");
   try {
     if (tab === "inventory") renderInventory();
     if (tab === "messages") renderMessages();
     if (tab === "stats") loadStats();
     if (tab === "fieldplan") loadFieldPlans();
     if (tab === "coupons") renderCoupons();
+    if (tab === "emails") loadEmailTemplates();
   } catch (e) {
     console.error("Tab-Fehler:", e);
     showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
@@ -2873,4 +2876,119 @@ function saveSection(sectionId) {
     .then(() => { showToast("Bereich gespeichert."); return reloadFieldPlan(); })
     .then(() => { renderFieldCanvas(); })
     .catch((err) => showToast(err.message));
+}
+
+// ---------------------------------------------------------------- email templates
+
+var EMAIL_PLACEHOLDERS = {
+  order_customer: ["order_no", "items", "subtotal", "discount", "shipping", "total", "delivery"],
+  order_admin: ["order_no", "total", "delivery_text", "coupon", "name", "phone", "email"],
+  status_change: ["order_no", "status"],
+  contact_admin: ["name", "email", "message"],
+  password_reset: ["name", "reset_url"],
+};
+
+var EMAIL_DESCRIPTIONS = {
+  order_customer: "Wird an den Kunden nach erfolgreicher Zahlung gesendet. Enthält die Bestelldetails und Rechnung.",
+  order_admin: "Benachrichtigung an den Admin bei neuer Bestellung.",
+  status_change: "Informiert den Kunden bei Statusänderung seiner Bestellung.",
+  contact_admin: "Benachrichtigung an den Admin bei neuer Kontaktanfrage.",
+  password_reset: "Link zum Passwort-Zurücksetzen für Kunden.",
+};
+
+function loadEmailTemplates() {
+  adminApi("api/admin/email-templates")
+    .then(function(data) {
+      window.ADMIN_EMAIL_TEMPLATES = data.templates || [];
+      renderEmailTemplates();
+    })
+    .catch(function(err) {
+      showMsg("emailsMsg", err.message || "E-Mail-Vorlagen konnten nicht geladen werden.", "danger");
+    });
+}
+
+function renderEmailTemplates() {
+  var list = document.getElementById("emailsList");
+  if (!list) return;
+  var templates = window.ADMIN_EMAIL_TEMPLATES || [];
+  if (templates.length === 0) {
+    list.innerHTML = '<p class="text-muted">Keine E-Mail-Vorlagen gefunden.</p>';
+    return;
+  }
+  list.innerHTML = templates.map(function(tpl) {
+    var placeholders = EMAIL_PLACEHOLDERS[tpl.key] || [];
+    var desc = EMAIL_DESCRIPTIONS[tpl.key] || "";
+    var phHtml = placeholders.length
+      ? '<div class="mt-2"><span class="small text-muted">Platzhalter: </span>' +
+        placeholders.map(function(p) { return '<code>{' + esc(p) + '}</code>'; }).join(" ") +
+        '</div>'
+      : '';
+    return (
+      '<div class="card mb-3" id="tplCard_' + esc(tpl.key) + '">' +
+      '<div class="card-header d-flex justify-content-between align-items-center">' +
+      '<div class="d-flex align-items-center gap-2">' +
+      '<strong>' + esc(tpl.name) + '</strong>' +
+      (tpl.enabled
+        ? '<span class="badge bg-success">Aktiv</span>'
+        : '<span class="badge bg-secondary">Deaktiviert</span>') +
+      '</div>' +
+      '<div class="form-check form-switch">' +
+      '<input class="form-check-input tpl-toggle" type="checkbox" data-key="' + esc(tpl.key) + '"' +
+      (tpl.enabled ? ' checked' : '') + ' title="Ein-/Ausschalten">' +
+      '</div>' +
+      '</div>' +
+      '<div class="card-body">' +
+      (desc ? '<p class="text-muted small mb-3">' + esc(desc) + '</p>' : '') +
+      '<div class="mb-3">' +
+      '<label class="form-label small fw-bold">Betreff</label>' +
+      '<input type="text" class="form-control form-control-sm tpl-subject" data-key="' + esc(tpl.key) + '" value="' + esc(tpl.subject) + '">' +
+      '</div>' +
+      '<div class="mb-3">' +
+      '<label class="form-label small fw-bold">Nachrichtentext</label>' +
+      '<textarea class="form-control form-control-sm tpl-body" data-key="' + esc(tpl.key) + '" rows="6" style="font-family:monospace;font-size:0.85em;">' + esc(tpl.body) + '</textarea>' +
+      phHtml +
+      '</div>' +
+      '<div class="text-end">' +
+      '<button class="btn btn-sm btn-irm tpl-save" data-key="' + esc(tpl.key) + '">' +
+      '<i class="bi bi-check-lg"></i> Speichern</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>'
+    );
+  }).join("");
+
+  list.querySelectorAll(".tpl-toggle").forEach(function(el) {
+    el.addEventListener("change", function() {
+      var key = el.dataset.key;
+      adminApi("api/admin/email-templates/" + encodeURIComponent(key), "PUT", { enabled: el.checked })
+        .then(function() {
+          showToast("Vorlage " + (el.checked ? "aktiviert" : "deaktiviert") + ".");
+          loadEmailTemplates();
+        })
+        .catch(function(err) { showToast(err.message); });
+    });
+  });
+
+  list.querySelectorAll(".tpl-save").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var key = btn.dataset.key;
+      var card = document.getElementById("tplCard_" + key);
+      if (!card) return;
+      var subject = card.querySelector(".tpl-subject").value.trim();
+      var body = card.querySelector(".tpl-body").value;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      adminApi("api/admin/email-templates/" + encodeURIComponent(key), "PUT", { subject: subject, body: body })
+        .then(function() {
+          showToast("Vorlage gespeichert.");
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-check-lg"></i> Speichern';
+        })
+        .catch(function(err) {
+          showToast(err.message);
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-check-lg"></i> Speichern';
+        });
+    });
+  });
 }

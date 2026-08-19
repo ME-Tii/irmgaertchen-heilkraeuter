@@ -208,6 +208,14 @@ SQLITE_SCHEMA = [
         plan_year INTEGER,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );""",
+    """CREATE TABLE IF NOT EXISTS email_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -377,6 +385,14 @@ PG_SCHEMA = [
         plan_year INTEGER,
         created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
+    """CREATE TABLE IF NOT EXISTS email_templates (
+        id SERIAL PRIMARY KEY,
+        key TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1
+    );""",
 ]
 
 SCHEMA = PG_SCHEMA if USE_PG else SQLITE_SCHEMA
@@ -505,6 +521,8 @@ def init_db():
     seed_products(conn)
     conn.commit()
     seed_plant_catalog(conn)
+    conn.commit()
+    seed_email_templates(conn)
     conn.commit()
     conn.close()
 
@@ -1326,6 +1344,116 @@ def seed_plant_catalog(conn):
             (name, cat, water, json.dumps(comp, ensure_ascii=False), json.dumps(incomp, ensure_ascii=False), ykg, ppk),
         )
     conn.commit()
+
+
+# ---- email templates ----
+
+DEFAULT_EMAIL_TEMPLATES = [
+    {
+        "key": "order_customer",
+        "name": "Bestellbestätigung (Kunde)",
+        "subject": "Ihre Bestellung {order_no} bei Irmgärtchen Heilkräuter",
+        "body": (
+            "Vielen Dank für Ihre Bestellung!\n\n"
+            "Bestellnummer: {order_no}\n\n"
+            "Ihre Bestellung:\n{items}\n"
+            "Zwischensumme: {subtotal} EUR\n{discount}"
+            "Versand: {shipping}\n"
+            "Gesamtbetrag: {total} EUR\n\n{delivery}"
+            'Sie koennen den Status jederzeit unter "Mein Konto" einsehen.'
+        ),
+        "enabled": 1,
+    },
+    {
+        "key": "order_admin",
+        "name": "Admin-Benachrichtigung (neue Bestellung)",
+        "subject": "Neue Bestellung {order_no}",
+        "body": (
+            "Es ist eine neue Bestellung eingegangen.\n\n"
+            "Bestellnummer: {order_no}\n"
+            "Betrag: {total} EUR\n"
+            "Lieferung: {delivery_text}\n"
+            "{coupon}"
+            "Kunde: {name}\n"
+            "Telefon: {phone}\n"
+            "E-Mail: {email}\n\n"
+            "Bitte im Admin-Panel bearbeiten."
+        ),
+        "enabled": 1,
+    },
+    {
+        "key": "status_change",
+        "name": "Statusänderung (Kunde)",
+        "subject": "Bestellung {order_no}: {status}",
+        "body": "Der Status Ihrer Bestellung {order_no} hat sich geändert: {status}",
+        "enabled": 1,
+    },
+    {
+        "key": "contact_admin",
+        "name": "Kontaktanfrage (Admin)",
+        "subject": "Neue Kontaktanfrage von {name}",
+        "body": (
+            "Eine neue Nachricht über das Kontaktformular ist eingegangen.\n\n"
+            "Name: {name}\n"
+            "E-Mail: {email}\n\n"
+            "Nachricht:\n{message}\n\n"
+            'Im Admin-Panel unter \u201eNachrichten\u201c einsehbar.'
+        ),
+        "enabled": 1,
+    },
+    {
+        "key": "password_reset",
+        "name": "Passwort zurücksetzen",
+        "subject": "Passwort zurücksetzen – Irmgärtchen Heilkräuter",
+        "body": (
+            "Hallo {name},\n\n"
+            "Sie haben angefragt, Ihr Passwort zurückzusetzen.\n"
+            "Klicken Sie auf den folgenden Link, um ein neues Passwort zu wählen "
+            "(gültig für 60 Minuten):\n\n"
+            "{reset_url}\n\n"
+            "Falls Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail einfach ignorieren.\n\n"
+            "Mit freundlichen Grüßen\n"
+            "Ihr Irmgärtchen-Team"
+        ),
+        "enabled": 1,
+    },
+]
+
+
+def seed_email_templates(conn):
+    cur = conn.execute("SELECT COUNT(*) AS c FROM email_templates")
+    if cur.fetchone()["c"] > 0:
+        return
+    for t in DEFAULT_EMAIL_TEMPLATES:
+        conn.execute(
+            _sql("INSERT INTO email_templates (key, name, subject, body, enabled) VALUES (%s, %s, %s, %s, %s)"),
+            (t["key"], t["name"], t["subject"], t["body"], t["enabled"]),
+        )
+
+
+def list_email_templates():
+    conn = get_conn()
+    rows = conn.execute(_sql("SELECT * FROM email_templates ORDER BY id")).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows]
+
+
+def get_email_template(key):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT * FROM email_templates WHERE key = %s"), (key,)).fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
+def update_email_template(key, fields):
+    if not fields:
+        return
+    sets = ", ".join(f"{k} = %s" for k in fields)
+    vals = list(fields.values()) + [key]
+    conn = get_conn()
+    conn.execute(_sql(f"UPDATE email_templates SET {sets} WHERE key = %s"), vals)
+    conn.commit()
+    conn.close()
 
 
 # ---- Crop Rotation ----
