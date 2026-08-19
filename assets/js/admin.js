@@ -156,7 +156,7 @@ function switchTab(tab) {
     if (tab === "fieldplan") loadFieldPlans();
     if (tab === "coupons") renderCoupons();
     if (tab === "emails") loadEmailTemplates();
-    if (tab === "backup") loadDhlConfig();
+    if (tab === "backup") loadFedExConfig();
   } catch (e) {
     console.error("Tab-Fehler:", e);
     showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
@@ -392,17 +392,14 @@ function renderDashboard() {
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
         '<td class="text-end">' +
         '<button class="btn btn-sm btn-outline-primary me-1 invoice-download" data-order="' + esc(o.order_no) + '" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i></button>' +
-        (isShipping && o.dhlStatus !== "paid"
-          ? '<button class="btn btn-sm btn-outline-success me-1 dhl-create" data-order="' + esc(o.order_no) + '" title="DHL Label erstellen"><i class="bi bi-box-seam"></i></button> '
+        (isShipping && o.labelStatus !== "label_created"
+          ? '<button class="btn btn-sm btn-outline-success me-1 fedex-create" data-order="' + esc(o.order_no) + '" title="FedEx Label erstellen"><i class="bi bi-box-seam"></i></button> '
           : "") +
-        (isShipping && o.dhlStatus === "paid"
-          ? '<button class="btn btn-sm btn-outline-success me-1 dhl-download" data-order="' + esc(o.order_no) + '" title="DHL Label herunterladen"><i class="bi bi-box-seam"></i></button> '
+        (isShipping && (o.labelStatus === "label_created" || o.labelStatus === "paid")
+          ? '<button class="btn btn-sm btn-outline-success me-1 fedex-download" data-order="' + esc(o.order_no) + '" title="FedEx Label herunterladen"><i class="bi bi-box-seam"></i></button> '
           : "") +
-        (isShipping && o.dhlTracking
-          ? '<span class="badge text-bg-success small me-1" title="Tracking: ' + esc(o.dhlTracking) + '"><i class="bi bi-truck"></i> ' + esc(o.dhlTracking.substring(0, 8)) + '…</span> '
-          : "") +
-        (isShipping && o.dhlStatus === "pending"
-          ? '<span class="badge text-bg-warning small me-1" title="DHL Label wartet auf Bezahlung"><i class="bi bi-hourglass-split"></i> DHL ausstehend</span> '
+        (isShipping && o.labelTracking
+          ? '<span class="badge text-bg-success small me-1" title="Tracking: ' + esc(o.labelTracking) + '"><i class="bi bi-truck"></i> ' + esc(o.labelTracking.substring(0, 8)) + '…</span> '
           : "") +
         (o.returnRequested && !o.returnProcessed
           ? '<button class="btn btn-sm btn-outline-warning return-done" data-order="' + esc(o.order_no) + '" title="Rückgabe als erledigt markieren"><i class="bi bi-check2-circle"></i></button> '
@@ -460,30 +457,31 @@ function renderDashboard() {
       refundOrder(btn.dataset.order, btn);
     });
   });
-  body.querySelectorAll(".dhl-create").forEach((btn) => {
+  body.querySelectorAll(".fedex-create").forEach((btn) => {
     btn.addEventListener("click", () => {
       const orderNo = btn.dataset.order;
-      const product = "V01PAK";
+      const service = "FEDEX_GROUND";
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-      adminApi("api/admin/orders/" + encodeURIComponent(orderNo) + "/dhl-label", "POST", { product: product })
+      adminApi("api/admin/orders/" + encodeURIComponent(orderNo) + "/dhl-label", "POST", { product: service })
         .then((data) => {
-          if (data.entry_url) {
-            window.open(data.entry_url, "_blank");
-            showMsg("ordersMsg", "DHL Warenkorb erstellt. Bitte im neuen Tab bezahlen.", "success");
+          if (data.tracking) {
+            showMsg("ordersMsg", "FedEx Label erstellt. Tracking: " + data.tracking, "success");
+          } else {
+            showMsg("ordersMsg", "FedEx Label erstellt.", "success");
           }
           loadDashboard();
         })
         .catch((err) => {
-          showMsg("ordersMsg", "DHL Fehler: " + err.message, "danger");
+          showMsg("ordersMsg", "FedEx Fehler: " + err.message, "danger");
           btn.disabled = false;
           btn.innerHTML = '<i class="bi bi-box-seam"></i>';
         });
     });
   });
-  body.querySelectorAll(".dhl-download").forEach((btn) => {
+  body.querySelectorAll(".fedex-download").forEach((btn) => {
     btn.addEventListener("click", () => {
-      adminDownloadFile("/api/admin/orders/" + encodeURIComponent(btn.dataset.order) + "/dhl-label", "DHL-Label-" + btn.dataset.order + ".pdf");
+      adminDownloadFile("/api/admin/orders/" + encodeURIComponent(btn.dataset.order) + "/dhl-label", "FedEx-Label-" + btn.dataset.order + ".pdf");
     });
   });
   body.querySelectorAll(".copy-address").forEach((el) => {
@@ -1377,42 +1375,42 @@ function showToast(message) {
   wrapper.addEventListener("hidden.bs.toast", () => wrapper.remove());
 }
 
-// ---------------------------------------------------------------- DHL config
+// ---------------------------------------------------------------- FedEx config
 
-function loadDhlConfig() {
+function loadFedExConfig() {
   adminApi("api/admin/dhl/config")
     .then((cfg) => {
-      document.getElementById("dhlSenderName").value = cfg.sender_name || "";
-      document.getElementById("dhlSenderStreet").value = cfg.sender_street || "";
-      document.getElementById("dhlSenderNumber").value = cfg.sender_number || "";
-      document.getElementById("dhlSenderPlz").value = cfg.sender_plz || "";
-      document.getElementById("dhlSenderCity").value = cfg.sender_city || "";
-      document.getElementById("dhlSenderEmail").value = cfg.sender_email || "";
-      document.getElementById("dhlSenderPhone").value = cfg.sender_phone || "";
+      document.getElementById("fedexSenderName").value = cfg.sender_name || "";
+      document.getElementById("fedexSenderStreet").value = cfg.sender_street || "";
+      document.getElementById("fedexSenderNumber").value = cfg.sender_number || "";
+      document.getElementById("fedexSenderPlz").value = cfg.sender_plz || "";
+      document.getElementById("fedexSenderCity").value = cfg.sender_city || "";
+      document.getElementById("fedexSenderEmail").value = cfg.sender_email || "";
+      document.getElementById("fedexSenderPhone").value = cfg.sender_phone || "";
     })
     .catch(() => {});
 }
 
-function saveDhlConfig(e) {
+function saveFedExConfig(e) {
   e.preventDefault();
   const data = {
-    sender_name: document.getElementById("dhlSenderName").value.trim(),
-    sender_street: document.getElementById("dhlSenderStreet").value.trim(),
-    sender_number: document.getElementById("dhlSenderNumber").value.trim(),
-    sender_plz: document.getElementById("dhlSenderPlz").value.trim(),
-    sender_city: document.getElementById("dhlSenderCity").value.trim(),
-    sender_email: document.getElementById("dhlSenderEmail").value.trim(),
-    sender_phone: document.getElementById("dhlSenderPhone").value.trim(),
+    sender_name: document.getElementById("fedexSenderName").value.trim(),
+    sender_street: document.getElementById("fedexSenderStreet").value.trim(),
+    sender_number: document.getElementById("fedexSenderNumber").value.trim(),
+    sender_plz: document.getElementById("fedexSenderPlz").value.trim(),
+    sender_city: document.getElementById("fedexSenderCity").value.trim(),
+    sender_email: document.getElementById("fedexSenderEmail").value.trim(),
+    sender_phone: document.getElementById("fedexSenderPhone").value.trim(),
   };
   adminApi("api/admin/dhl/config", "POST", data)
     .then(() => {
-      document.getElementById("dhlConfigMsg").textContent = "Gespeichert.";
-      document.getElementById("dhlConfigMsg").className = "ms-2 small text-success";
-      setTimeout(() => { document.getElementById("dhlConfigMsg").textContent = ""; }, 2000);
+      document.getElementById("fedexConfigMsg").textContent = "Gespeichert.";
+      document.getElementById("fedexConfigMsg").className = "ms-2 small text-success";
+      setTimeout(() => { document.getElementById("fedexConfigMsg").textContent = ""; }, 2000);
     })
     .catch((err) => {
-      document.getElementById("dhlConfigMsg").textContent = err.message || "Fehler";
-      document.getElementById("dhlConfigMsg").className = "ms-2 small text-danger";
+      document.getElementById("fedexConfigMsg").textContent = err.message || "Fehler";
+      document.getElementById("fedexConfigMsg").className = "ms-2 small text-danger";
     });
 }
 
@@ -3333,6 +3331,6 @@ function showCustomerDetail(userId) {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-  var dhlForm = document.getElementById("dhlConfigForm");
-  if (dhlForm) dhlForm.addEventListener("submit", saveDhlConfig);
+  var fedexForm = document.getElementById("fedexConfigForm");
+  if (fedexForm) fedexForm.addEventListener("submit", saveFedExConfig);
 });

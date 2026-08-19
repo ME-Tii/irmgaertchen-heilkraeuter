@@ -251,9 +251,9 @@ def order_to_dict(order):
     d["refunded"] = bool(d.pop("refunded"))
     d["refundedAt"] = d.pop("refunded_at")
     d["stripeRefundId"] = d.pop("stripe_refund_id")
-    d["dhlStatus"] = d.pop("dhl_status", "") or ""
-    d["dhlTracking"] = d.pop("dhl_tracking_number", "") or ""
-    d["dhlProduct"] = d.pop("dhl_product", "") or ""
+    d["labelStatus"] = d.pop("dhl_status", "") or ""
+    d["labelTracking"] = d.pop("dhl_tracking_number", "") or ""
+    d["labelService"] = d.pop("dhl_product", "") or ""
     d.pop("dhl_shopping_cart_id", None)
     d.pop("dhl_notify_token", None)
     d.pop("dhl_label_pdf", None)
@@ -1403,14 +1403,16 @@ def admin_newsletter_send():
         return err(f"Senden fehlgeschlagen: {e}", 500)
 
 
-# ---- DHL Shipping Labels ----
+# ---- FedEx Shipping Labels ----
 
-import dhl as dhl_api
+import fedex as fedex_api
 
-DHL_PRODUCTS = [
-    {"code": "V01PAK", "name": "DHL Paket", "max_weight_g": 31500},
-    {"code": "V53WPAK", "name": "DHL Paket Connect", "max_weight_g": 31500},
-    {"code": "V01EPAK", "name": "DHL Paket International", "max_weight_g": 31500},
+FEDEX_SERVICES = [
+    {"code": "FEDEX_GROUND", "name": "FedEx Ground"},
+    {"code": "FEDEX_EXPRESS_SAVER", "name": "FedEx Express Saver"},
+    {"code": "FEDEX_2_DAY", "name": "FedEx 2Day"},
+    {"code": "STANDARD_OVERNIGHT", "name": "FedEx Standard Overnight"},
+    {"code": "PRIORITY_OVERNIGHT", "name": "FedEx Priority Overnight"},
 ]
 
 
@@ -1437,7 +1439,7 @@ def admin_dhl_products():
     bad = _admin_ok(require_admin())
     if bad:
         return bad
-    return jsonify(DHL_PRODUCTS)
+    return jsonify(FEDEX_SERVICES)
 
 
 @app.post("/api/admin/orders/<order_no>/dhl-label")
@@ -1445,88 +1447,46 @@ def admin_dhl_create_label(order_no):
     bad = _admin_ok(require_admin())
     if bad:
         return bad
-    if not dhl_api.enabled():
-        return err("DHL API-Key nicht konfiguriert.", 400)
+    if not fedex_api.enabled():
+        return err("FedEx API-Zugangsdaten nicht konfiguriert.", 400)
     order = db.get_order(order_no)
     if not order:
         return err("Bestellung nicht gefunden.", 404)
     if order.get("delivery_method") != "delivery":
-        return err("Nur Lieferbestellungen können ein DHL-Label erhalten.", 400)
-    if order.get("dhl_status") == "paid":
-        return err("Label wurde bereits erstellt und bezahlt.", 400)
+        return err("Nur Lieferbestellungen können ein FedEx-Label erhalten.", 400)
+    if order.get("dhl_status") == "label_created":
+        return err("Label wurde bereits erstellt.", 400)
     config = db.get_dhl_config()
     if not config or not config.get("sender_name"):
-        return err("DHL Absenderadresse nicht konfiguriert.", 400)
+        return err("FedEx Absenderadresse nicht konfiguriert.", 400)
 
-    product = (request.get_json(silent=True) or {}).get("product", "V01PAK")
-    token = secrets.token_hex(32)
-    site_url = os.environ.get("DOMAIN", "https://irmgaertchen.de").rstrip("/")
+    service = (request.get_json(silent=True) or {}).get("product", "FEDEX_GROUND")
 
     try:
-        result = dhl_api.create_shopping_cart(order, config, product=product, notify_token=token, site_url=site_url)
+        result = fedex_api.create_shipment(order, config, service=service)
     except Exception as e:
-        print(f"[dhl] Fehler beim Erellen des Warenkorbs: {e}")
-        return err(f"DHL API Fehler: {e}", 500)
+        print(f"[fedex] Fehler beim Erstellen des Labels: {e}")
+        return err(f"FedEx API Fehler: {e}", 500)
 
-    cart_id = result.get("shopping_cart_id", "")
-    entry_url = result.get("entry_url", "")
+    tracking = result.get("tracking", "")
+    pdf_bytes = result.get("pdf")
 
-    db.update_order_dhl(
-        order_no,
-        dhl_shopping_cart_id=cart_id,
-        dhl_notify_token=token,
-        dhl_status="pending",
-        dhl_product=product,
-    )
+    if pdf_bytes:
+        db.set_order_label_pdf(order_no, pdf_bytes)
+        db.update_order_dhl(
+            order_no,
+            dhl_tracking_number=tracking,
+            dhl_product=service,
+        )
+    else:
+        db.update_order_dhl(
+            order_no,
+            dhl_tracking_number=tracking,
+            dhl_product=service,
+            dhl_status="label_created",
+        )
 
-    return jsonify({"entry_url": entry_url, "shopping_cart_id": cart_id})
-
-
-@app.get("/api/admin/dhl-notify/<token>")
-def admin_dhl_notify(token):
-    shopping_cart_id_param = request.args.get("shoppingCartId", "")
-    order_no = db.find_order_by_notify_token(token)
-    if not order_no:
-        print(f"[dhl] Notify-Token nicht gefunden: {token[:16]}...")
-        return "OK", 200
-
-    order = db.get_order(order_no)
-    if not order:
-        return "OK", 200
-
-    cart_id = order.get("dhl_shopping_cart_id", "") or shopping_cart_id_param
-    if not cart_id:
-        return "OK", 200
-
-    try:
-        cart = dhl_api.get_cart_status(cart_id)
-        items = cart.get("items", [])
-        tracking = ""
-        for item in items:
-            t = item.get("trackingNumber", "") or item.get("parcelno", "")
-            if t:
-                tracking = t
-                break
-
-        label_result = dhl_api.get_label(cart_id)
-        if isinstance(label_result, dict) and label_result.get("pdf"):
-            db.set_order_label_pdf(order_no, label_result["pdf"])
-        else:
-            db.update_order_dhl(
-                order_no,
-                dhl_status="paid",
-                dhl_tracking_number=tracking or (label_result.get("tracking", "") if isinstance(label_result, dict) else ""),
-            )
-
-        if tracking:
-            db.update_order_dhl(order_no, dhl_tracking_number=tracking)
-
-        db.update_order_dhl(order_no, dhl_notify_token="")
-    except Exception as e:
-        print(f"[dhl] Notify-Verarbeitung fehlgeschlagen für {order_no}: {e}")
-        db.update_order_dhl(order_no, dhl_status="error")
-
-    return "OK", 200
+    return jsonify({"tracking": tracking, "has_pdf": bool(pdf_bytes)})
 
 
 @app.get("/api/admin/orders/<order_no>/dhl-label")
@@ -1540,7 +1500,7 @@ def admin_dhl_download_label(order_no):
     return Response(
         pdf,
         mimetype="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="DHL-Label-{order_no}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="FedEx-Label-{order_no}.pdf"'},
     )
 
 

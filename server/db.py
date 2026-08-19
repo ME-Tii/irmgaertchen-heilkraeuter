@@ -551,7 +551,7 @@ def init_db():
             (info.get("image", ""), slug),
         )
     conn.commit()
-    # ---- DHL shipping label columns
+    # ---- Shipping label columns
     for col in ("dhl_shopping_cart_id", "dhl_notify_token", "dhl_label_pdf", "dhl_tracking_number", "dhl_status", "dhl_product"):
         try:
             if col == "dhl_label_pdf":
@@ -1778,7 +1778,7 @@ def import_all_tables(data):
         conn.close()
 
 
-# ---- DHL Shipping ----
+# ---- Shipping ----
 
 def get_dhl_config():
     conn = get_conn()
