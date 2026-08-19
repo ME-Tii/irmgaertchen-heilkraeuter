@@ -37,7 +37,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import db
 from products import shipping_fee_cents
 import mailer
-from invoice import generate_invoice_pdf
+from invoice import generate_invoice_pdf, generate_address_label_pdf, generate_packing_slip_pdf
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -1199,6 +1199,40 @@ def customer_order_invoice(order_no):
         buf.getvalue(),
         mimetype="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="Rechnung-{order_no}.pdf"'},
+    )
+
+
+@app.get("/api/admin/orders/<order_no>/address-label")
+def admin_order_address_label(order_no):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    order = db.get_order(order_no)
+    if not order:
+        return err("Bestellung nicht gefunden.", 404)
+    d = order_to_dict(order)
+    buf = generate_address_label_pdf(d)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Versandlabel-{order_no}.pdf"'},
+    )
+
+
+@app.get("/api/admin/orders/<order_no>/packing-slip")
+def admin_order_packing_slip(order_no):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    order = db.get_order(order_no)
+    if not order:
+        return err("Bestellung nicht gefunden.", 404)
+    d = order_to_dict(order)
+    buf = generate_packing_slip_pdf(d)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Lieferschein-{order_no}.pdf"'},
     )
 
 
