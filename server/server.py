@@ -1460,7 +1460,7 @@ def admin_dhl_create_label(order_no):
     if not config or not config.get("sender_name"):
         return err("FedEx Absenderadresse nicht konfiguriert.", 400)
 
-    service = (request.get_json(silent=True) or {}).get("product", "FEDEX_GROUND")
+    service = (request.get_json(silent=True) or {}).get("product", "FEDEX_EXPRESS_SAVER")
 
     try:
         result = fedex_api.create_shipment(order, config, service=service)
