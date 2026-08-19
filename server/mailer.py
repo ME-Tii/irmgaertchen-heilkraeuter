@@ -1,6 +1,5 @@
 import os
 import smtplib
-import base64
 from email.message import EmailMessage
 from xml.sax.saxutils import escape as esc
 
@@ -10,14 +9,6 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "shop@irmgaertchen.de")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
-
-_LOGO_DATA_URI = ""
-_logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "img", "logo-irmgaertchen_weiss.png")
-try:
-    with open(_logo_path, "rb") as _f:
-        _LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(_f.read()).decode()
-except Exception:
-    _LOGO_DATA_URI = ""
 
 
 def email_enabled():
@@ -116,46 +107,6 @@ def _send_html(subject, to, html, fallback_text=""):
             _log(to, subject, True, f"({SMTP_HOST}:{port})")
             return True
         except Exception as e:
-            errors.append(f"({SMTP_HOST}:{port}) {e}")
-    print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
-    _log(to, subject, False, " | ".join(errors))
-    return False
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
-    msg["To"] = to
-    msg.set_content(text, subtype="plain", charset="utf-8")
-    if attachment:
-        msg.add_attachment(
-            attachment["data"],
-            maintype="application",
-            subtype="pdf",
-            filename=attachment["filename"],
-        )
-    candidates = [(SMTP_PORT, SMTP_PORT == 465)]
-    for port in FALLBACK_PORTS:
-        if port not in [c[0] for c in candidates]:
-            candidates.append((port, port == 465))
-    errors = []
-    for port, ssl in candidates:
-        try:
-            if ssl:
-                with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=20) as server:
-                    if SMTP_USER:
-                        server.login(SMTP_USER, SMTP_PASSWORD)
-                    server.send_message(msg)
-            else:
-                with smtplib.SMTP(SMTP_HOST, port, timeout=20) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.ehlo()
-                    if SMTP_USER:
-                        server.login(SMTP_USER, SMTP_PASSWORD)
-                    server.send_message(msg)
-            _log(to, subject, True, f"({SMTP_HOST}:{port})")
-            return True
-        except Exception as e:
-            # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
             errors.append(f"({SMTP_HOST}:{port}) {e}")
     print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
     _log(to, subject, False, " | ".join(errors))
@@ -428,7 +379,7 @@ def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de", em
         '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">'
         '<!-- header -->'
         '<tr><td style="background:#3f6b3b;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;">'
-        '<img src="' + (_LOGO_DATA_URI or 'https://irmgaertchen.de/assets/img/logo-irmgaertchen_weiss.png') + '" '
+        '<img src="' + site_url + '/assets/img/logo-irmgaertchen_weiss.png" '
         'alt="Irmg&auml;rtchen" width="120" style="display:block;margin:0 auto 12px;max-width:120px;height:auto;">'
         '<h1 style="margin:0;color:#fff;font-size:22px;">Irmg&auml;rtchen Heilkr&auml;uter</h1>'
         '<p style="margin:6px 0 0;color:#c8e6c9;font-size:13px;">Newsletter &middot; Ernte-News &amp; Tipps</p>'
