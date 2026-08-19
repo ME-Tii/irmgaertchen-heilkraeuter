@@ -142,7 +142,7 @@ def create_shipment(order, config, service="FEDEX_EXPRESS_SAVER"):
                 "labelFormatType": "COMMON2D",
                 "imageType": "PDF",
             },
-            "packages": [{
+            "requestedPackageLineItems": [{
                 "weight": {
                     "value": weight_kg,
                     "units": "KG",
