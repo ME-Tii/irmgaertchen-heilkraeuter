@@ -465,6 +465,11 @@ def init_db():
     except Exception:
         conn.rollback()
     try:
+        conn.execute(_sql("ALTER TABLE field_sections ADD COLUMN watering_auto INTEGER NOT NULL DEFAULT 0"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
         if USE_PG:
             conn.execute(_sql(
                 "CREATE TABLE IF NOT EXISTS crop_rotation_history ("

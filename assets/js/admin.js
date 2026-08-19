@@ -893,7 +893,7 @@ function renderWateringCalendar() {
       var diff = Math.round((days[i].date.getTime() - next.getTime()) / 86400000);
       var freq = getWateringFrequencyDays(s);
       if (freq > 0 && diff >= 0 && diff % freq === 0) {
-        days[i].sections.push({ id: s.id, name: name, color: s.color || "#3f6b3b" });
+        days[i].sections.push({ id: s.id, name: name, color: s.color || "#3f6b3b", auto: !!s.watering_auto });
       }
     }
   });
@@ -911,9 +911,13 @@ function renderWateringCalendar() {
       html += '<span class="text-muted small">—</span>';
     } else {
       d.sections.forEach(function(sec) {
-        html += '<span class="badge d-flex align-items-center gap-1" style="background:' + esc(sec.color) + ';color:#fff;font-weight:500;">' + esc(sec.name);
-        html += '<button class="btn btn-sm p-0 border-0 bg-transparent text-white lh-1 water-mark-btn" data-id="' + sec.id + '" title="Als gegossen markieren" style="font-size:0.7rem;">&#10003;</button>';
-        html += '</span>';
+        if (sec.auto) {
+          html += '<span class="badge d-flex align-items-center gap-1" style="background:' + esc(sec.color) + ';color:#fff;font-weight:500;opacity:0.65;border:1px dashed rgba(255,255,255,0.5);">' + esc(sec.name) + ' <i class="bi bi-magic" style="font-size:0.65rem;" title="Automatische Bewässerung"></i></span>';
+        } else {
+          html += '<span class="badge d-flex align-items-center gap-1" style="background:' + esc(sec.color) + ';color:#fff;font-weight:500;">' + esc(sec.name);
+          html += '<button class="btn btn-sm p-0 border-0 bg-transparent text-white lh-1 water-mark-btn" data-id="' + sec.id + '" title="Als gegossen markieren" style="font-size:0.7rem;">&#10003;</button>';
+          html += '</span>';
+        }
       });
     }
     html += '</div></div>';
@@ -2783,6 +2787,10 @@ function showSectionPanel(section) {
     '<input type="date" class="form-control form-control-sm" id="fsWaterLast" value="' + (section.watering_last || '') + '">' +
     '</div>' +
     '</div>' +
+    '<div class="form-check mb-2">' +
+    '<input class="form-check-input" type="checkbox" id="fsWaterAuto"' + (section.watering_auto ? ' checked' : '') + '>' +
+    '<label class="form-check-label small" for="fsWaterAuto"><i class="bi bi-magic"></i> Automatische Bewässerung</label>' +
+    '</div>' +
     '<div class="mb-2">' +
     '<label class="form-label small">Notizen</label>' +
     '<textarea class="form-control form-control-sm" id="fsNotes" rows="2">' + esc(section.notes || '') + '</textarea>' +
@@ -2835,6 +2843,7 @@ function saveSection(sectionId) {
     growth_stage: document.getElementById("fsStage").value,
     watering_interval: intervalVal ? parseInt(intervalVal) || null : null,
     watering_last: lastVal || null,
+    watering_auto: document.getElementById("fsWaterAuto").checked ? 1 : 0,
     notes: document.getElementById("fsNotes").value.trim(),
     color: document.getElementById("fsColor").value,
   };
