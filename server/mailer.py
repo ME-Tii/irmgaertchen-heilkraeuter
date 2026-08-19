@@ -1,6 +1,7 @@
 import os
 import smtplib
 from email.message import EmailMessage
+from xml.sax.saxutils import escape as esc
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))

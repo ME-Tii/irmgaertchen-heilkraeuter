@@ -1351,8 +1351,6 @@ def admin_update_email_template(key):
 @app.get("/api/admin/newsletter/preview")
 def admin_newsletter_preview():
     bad = _admin_ok(require_admin())
-    if not bad:
-        pass
     if bad:
         return bad
     harvests = db.get_upcoming_harvests(14)
@@ -1363,8 +1361,6 @@ def admin_newsletter_preview():
 @app.post("/api/admin/newsletter/send")
 def admin_newsletter_send():
     bad = _admin_ok(require_admin())
-    if not bad:
-        pass
     if bad:
         return bad
     if not mailer.email_enabled():
