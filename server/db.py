@@ -218,6 +218,10 @@ SQLITE_SCHEMA = [
         body TEXT NOT NULL DEFAULT '',
         enabled INTEGER NOT NULL DEFAULT 1
     );""",
+    """CREATE TABLE IF NOT EXISTS site_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT ''
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -396,6 +400,10 @@ PG_SCHEMA = [
         subject TEXT NOT NULL DEFAULT '',
         body TEXT NOT NULL DEFAULT '',
         enabled INTEGER NOT NULL DEFAULT 1
+    );""",
+    """CREATE TABLE IF NOT EXISTS site_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT ''
     );""",
 ]
 
@@ -1530,6 +1538,23 @@ def update_email_template(key, fields):
     conn.close()
 
 
+def get_setting(key, default=""):
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT value FROM site_settings WHERE key = %s"), (key,)).fetchone()
+    conn.close()
+    return row["value"] if row else default
+
+
+def set_setting(key, value):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO site_settings (key, value) VALUES (%s, %s) ON CONFLICT(key) DO UPDATE SET value = %s"),
+        (key, value, value),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_upcoming_harvests(days=14):
     conn = get_conn()
     now = time.strftime("%Y-%m-%d")
@@ -1651,6 +1676,8 @@ BACKUP_TABLES = [
     "field_sections",
     "plant_catalog",
     "crop_rotation_history",
+    "email_templates",
+    "site_settings",
 ]
 
 

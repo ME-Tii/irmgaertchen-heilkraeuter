@@ -614,6 +614,14 @@
                 <i class="bi bi-send"></i> Newsletter senden
               </button>
             </div>
+            <div class="d-flex align-items-center gap-3 p-2 rounded" style="background:#f8f9fa;">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="newsletterAutoToggle">
+                <label class="form-check-label fw-bold small" for="newsletterAutoToggle">Automatisch senden</label>
+              </div>
+              <span class="text-muted small" id="newsletterAutoInfo">Jeden Montag, wenn Ernte in 2 Wochen</span>
+            </div>
+            <div id="newsletterAutoLastSent" class="text-muted small mt-1"></div>
             <div id="newsletterPreviewWrap" class="d-none">
               <label class="form-label small fw-bold">E-Mail-Vorschau</label>
               <div id="newsletterPreview" style="border:1px solid #dee2e6;border-radius:6px;overflow:hidden;max-height:500px;overflow-y:auto;"></div>

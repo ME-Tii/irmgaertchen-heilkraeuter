@@ -397,8 +397,19 @@ def _build_harvest_html(harvests):
     )
 
 
-def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de"):
+def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de", email=""):
     harvest_html = _build_harvest_html(harvests)
+    unsubscribe_link = ""
+    if email:
+        import hmac as _hmac, hashlib as _hashlib
+        secret = os.environ.get("SECRET_KEY", os.environ.get("IRM_ADMIN_PASSWORD", "irmgaertchen-secret-change-me"))
+        token = _hmac.new(secret.encode(), email.encode(), _hashlib.sha256).hexdigest()[:32]
+        from urllib.parse import quote as _quote
+        unsubscribe_link = (
+            '<p style="margin:8px 0 0;font-size:11px;color:#aaa;">'
+            '<a href="' + site_url + '/api/newsletter/unsubscribe?token=' + token + '&email=' + _quote(email) + '" '
+            'style="color:#aaa;">Vom Newsletter abmelden</a></p>'
+        )
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1.0"></head>'
@@ -434,6 +445,7 @@ def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de"):
         '<p style="margin:0;font-size:11px;color:#888;">'
         '&copy; 2026 Irmg&auml;rtchen Heilkr&auml;uter &middot; '
         '<a href="' + site_url + '" style="color:#3f6b3b;">irmgaertchen.de</a></p>'
+        + unsubscribe_link +
         '</td></tr>'
         '</table></td></tr></table>'
         '</body></html>'
@@ -442,3 +454,21 @@ def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de"):
 
 def send_newsletter(subscriber, subject, html, plain_text):
     return _send_html(subject, subscriber["email"], html, plain_text)
+
+
+def build_newsletter_for_subscriber(subscriber, harvests, site_url="https://irmgaertchen.de"):
+    name = subscriber.get("name") or subscriber.get("email", "").split("@")[0]
+    html = build_newsletter_html(name, harvests, site_url, email=subscriber.get("email", ""))
+    plain = (
+        f"Hallo {name},\n\n"
+        "Willkommen bei unserem Newsletter!\n\n"
+    )
+    if harvests:
+        plain += "Bald erntereif:\n"
+        for h in harvests:
+            variety = f" ({h['plant_variety']})" if h.get("plant_variety") else ""
+            plain += f"  - {h['plant_name']}{variety} – {h.get('expected_harvest', '')}\n"
+    else:
+        plain += "Keine Ernte in den nächsten 2 Wochen geplant.\n"
+    plain += f"\nViele Grüße\nDein Irmgärtchen-Team\n\n{site_url}"
+    return subject, html, plain

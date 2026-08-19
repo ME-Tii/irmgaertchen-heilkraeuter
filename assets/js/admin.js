@@ -3042,7 +3042,37 @@ document.addEventListener("DOMContentLoaded", function() {
   if (previewBtn) previewBtn.addEventListener("click", loadNewsletterPreview);
   var sendBtn = document.getElementById("newsletterSendBtn");
   if (sendBtn) sendBtn.addEventListener("click", sendNewsletter);
+  loadNewsletterSettings();
 });
+
+function loadNewsletterSettings() {
+  var toggle = document.getElementById("newsletterAutoToggle");
+  var info = document.getElementById("newsletterAutoLastSent");
+  adminApi("api/admin/newsletter/settings")
+    .then(function(data) {
+      if (toggle) toggle.checked = data.auto_enabled;
+      if (info && data.last_sent) {
+        var d = new Date(data.last_sent);
+        info.textContent = "Zuletzt gesendet: " + d.toLocaleString("de-DE");
+      } else if (info) {
+        info.textContent = "Noch nie automatisch gesendet.";
+      }
+    })
+    .catch(function() {});
+  if (toggle && !toggle._bound) {
+    toggle._bound = true;
+    toggle.addEventListener("change", function() {
+      adminApi("api/admin/newsletter/settings", "POST", { auto_enabled: toggle.checked })
+        .then(function() {
+          showToast("Automatischer Versand " + (toggle.checked ? "aktiviert" : "deaktiviert") + ".");
+        })
+        .catch(function(err) {
+          showToast(err.message);
+          toggle.checked = !toggle.checked;
+        });
+    });
+  }
+}
 
 // ---------------------------------------------------------------- customers
 

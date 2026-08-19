@@ -48,6 +48,7 @@ ADMIN_USERNAME = os.environ.get("IRM_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("IRM_ADMIN_PASSWORD", "")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+SECRET_KEY = os.environ.get("SECRET_KEY", os.environ.get("IRM_ADMIN_PASSWORD", "irmgaertchen-secret-change-me"))
 
 stripe.api_key = STRIPE_SECRET_KEY
 
@@ -1354,7 +1355,7 @@ def admin_newsletter_preview():
     if bad:
         return bad
     harvests = db.get_upcoming_harvests(14)
-    html = mailer.build_newsletter_html("Vorschau", harvests)
+    html = mailer.build_newsletter_html("Vorschau", harvests, email="vorschau@irmgaertchen.de")
     return jsonify({"html": html, "harvests": [h["plant_name"] + " – " + (h["expected_harvest"] or "") for h in harvests]})
 
 
@@ -1375,21 +1376,8 @@ def admin_newsletter_send():
     subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
     sent = 0
     for sub in subscribers:
-        name = sub.get("name") or sub.get("email", "").split("@")[0]
-        html = mailer.build_newsletter_html(name, harvests)
-        plain = (
-            f"Hallo {name},\n\n"
-            "Willkommen bei unserem Newsletter!\n\n"
-        )
-        if harvests:
-            plain += "Bald erntereif:\n"
-            for h in harvests:
-                variety = f" ({h['plant_variety']})" if h.get("plant_variety") else ""
-                plain += f"  - {h['plant_name']}{variety} – {h.get('expected_harvest', '')}\n"
-        else:
-            plain += "Keine Ernte in den nächsten 2 Wochen geplant.\n"
-        plain += f"\nViele Grüße\nDein Irmgärtchen-Team\n\n{SITE_URL}"
-        if mailer.send_newsletter(sub, subject, html, plain):
+        s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests)
+        if mailer.send_newsletter(sub, s, html, plain):
             sent += 1
     db.log_newsletter_send(sent)
     return jsonify({"ok": True, "sent": sent, "total": len(subscribers)})
@@ -2071,6 +2059,102 @@ def health():
             "db": "postgres" if os.environ.get("DATABASE_URL", "").strip() else "sqlite",
         }
     )
+
+
+# ---------------------------------------------------------------- newsletter automation
+
+def _newsletter_auto_send():
+    try:
+        harvests = db.get_upcoming_harvests(14)
+        if not harvests:
+            print("[newsletter-auto] Keine Ernte in 14 Tagen – Überspringe.")
+            return
+        subscribers = db.get_newsletter_subscribers()
+        if not subscribers:
+            print("[newsletter-auto] Keine Abonnenten – Überspringe.")
+            return
+        tpl = db.get_email_template("newsletter")
+        subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
+        sent = 0
+        for sub in subscribers:
+            s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests)
+            if mailer.send_newsletter(sub, s, html, plain):
+                sent += 1
+        db.log_newsletter_send(sent)
+        db.set_setting("newsletter_auto_last_sent", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        print(f"[newsletter-auto] Newsletter an {sent}/{len(subscribers)} Abonnenten gesendet.")
+    except Exception as e:
+        print(f"[newsletter-auto] Fehler: {e}")
+
+
+def _newsletter_scheduler():
+    import calendar as _cal
+    while True:
+        time.sleep(3600)
+        try:
+            enabled = db.get_setting("newsletter_auto_enabled", "0")
+            if enabled != "1":
+                continue
+            now = time.localtime()
+            if now.tm_wday != 0:
+                continue
+            last = db.get_setting("newsletter_auto_last_sent", "")
+            today = time.strftime("%Y-%m-%d", now)
+            if last.startswith(today):
+                continue
+            _newsletter_auto_send()
+        except Exception as e:
+            print(f"[newsletter-auto] Scheduler-Fehler: {e}")
+
+
+@app.get("/api/admin/newsletter/settings")
+def admin_newsletter_settings():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    return jsonify({
+        "auto_enabled": db.get_setting("newsletter_auto_enabled", "0") == "1",
+        "last_sent": db.get_setting("newsletter_auto_last_sent", ""),
+    })
+
+
+@app.post("/api/admin/newsletter/settings")
+def admin_newsletter_settings_save():
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    if "auto_enabled" in data:
+        db.set_setting("newsletter_auto_enabled", "1" if data["auto_enabled"] else "0")
+    return jsonify({"ok": True})
+
+
+@app.get("/api/newsletter/unsubscribe")
+def newsletter_unsubscribe():
+    token = request.args.get("token", "")
+    email = request.args.get("email", "")
+    if not token or not email:
+        return "Ungültiger Link.", 400
+    expected = hmac.new(SECRET_KEY.encode(), email.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(token, expected):
+        return "Ungültiger Link.", 400
+    user = db.get_user_by_email_ci(email)
+    if user:
+        db.set_user_newsletter(user["id"], 0)
+    return "Sie wurden erfolgreich vom Newsletter abgemeldet.", 200
+
+
+_threading_started = False
+
+def _start_scheduler():
+    global _threading_started
+    if _threading_started:
+        return
+    _threading_started = True
+    t = threading.Thread(target=_newsletter_scheduler, daemon=True)
+    t.start()
+
+_start_scheduler()
 
 
 if __name__ == "__main__":
