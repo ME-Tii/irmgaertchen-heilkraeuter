@@ -1,5 +1,6 @@
 import os
 import smtplib
+import base64
 from email.message import EmailMessage
 from xml.sax.saxutils import escape as esc
 
@@ -9,6 +10,14 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "shop@irmgaertchen.de")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+
+_LOGO_DATA_URI = ""
+_logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "img", "logo-irmgaertchen_weiss.png")
+try:
+    with open(_logo_path, "rb") as _f:
+        _LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(_f.read()).decode()
+except Exception:
+    _LOGO_DATA_URI = ""
 
 
 def email_enabled():
@@ -419,7 +428,7 @@ def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de", em
         '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">'
         '<!-- header -->'
         '<tr><td style="background:#3f6b3b;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;">'
-        '<img src="https://irmgaertchen.de/assets/img/logo-irmgaertchen_weiss.png" '
+        '<img src="' + (_LOGO_DATA_URI or 'https://irmgaertchen.de/assets/img/logo-irmgaertchen_weiss.png') + '" '
         'alt="Irmg&auml;rtchen" width="120" style="display:block;margin:0 auto 12px;max-width:120px;height:auto;">'
         '<h1 style="margin:0;color:#fff;font-size:22px;">Irmg&auml;rtchen Heilkr&auml;uter</h1>'
         '<p style="margin:6px 0 0;color:#c8e6c9;font-size:13px;">Newsletter &middot; Ernte-News &amp; Tipps</p>'
