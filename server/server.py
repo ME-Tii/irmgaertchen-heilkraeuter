@@ -1348,6 +1348,57 @@ def admin_update_email_template(key):
     return jsonify({"ok": True})
 
 
+@app.get("/api/admin/newsletter/preview")
+def admin_newsletter_preview():
+    bad = _admin_ok(require_admin())
+    if not bad:
+        pass
+    if bad:
+        return bad
+    harvests = db.get_upcoming_harvests(14)
+    html = mailer.build_newsletter_html("Vorschau", harvests)
+    return jsonify({"html": html, "harvests": [h["plant_name"] + " – " + (h["expected_harvest"] or "") for h in harvests]})
+
+
+@app.post("/api/admin/newsletter/send")
+def admin_newsletter_send():
+    bad = _admin_ok(require_admin())
+    if not bad:
+        pass
+    if bad:
+        return bad
+    if not mailer.email_enabled():
+        return err("E-Mail-Versand ist nicht konfiguriert (SMTP fehlt).", 400)
+    tpl = db.get_email_template("newsletter")
+    if tpl and not tpl["enabled"]:
+        return err("Newsletter-Vorlage ist deaktiviert.", 400)
+    subscribers = db.get_newsletter_subscribers()
+    if not subscribers:
+        return err("Keine Newsletter-Abonnenten vorhanden.", 400)
+    harvests = db.get_upcoming_harvests(14)
+    subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
+    sent = 0
+    for sub in subscribers:
+        name = sub.get("name") or sub.get("email", "").split("@")[0]
+        html = mailer.build_newsletter_html(name, harvests)
+        plain = (
+            f"Hallo {name},\n\n"
+            "Willkommen bei unserem Newsletter!\n\n"
+        )
+        if harvests:
+            plain += "Bald erntereif:\n"
+            for h in harvests:
+                variety = f" ({h['plant_variety']})" if h.get("plant_variety") else ""
+                plain += f"  - {h['plant_name']}{variety} – {h.get('expected_harvest', '')}\n"
+        else:
+            plain += "Keine Ernte in den nächsten 2 Wochen geplant.\n"
+        plain += f"\nViele Grüße\nDein Irmgärtchen-Team\n\n{SITE_URL}"
+        if mailer.send_newsletter(sub, subject, html, plain):
+            sent += 1
+    db.log_newsletter_send(sent)
+    return jsonify({"ok": True, "sent": sent, "total": len(subscribers)})
+
+
 @app.get("/api/admin/products")
 def admin_products():
     bad = _admin_ok(require_admin())

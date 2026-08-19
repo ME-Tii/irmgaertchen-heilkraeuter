@@ -2996,6 +2996,54 @@ function renderEmailTemplates() {
   });
 }
 
+// ---------------------------------------------------------------- newsletter
+
+function loadNewsletterPreview() {
+  var wrap = document.getElementById("newsletterPreviewWrap");
+  var box = document.getElementById("newsletterPreview");
+  var msg = document.getElementById("newsletterMsg");
+  if (wrap) wrap.classList.remove("d-none");
+  if (box) box.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Lade Vorschau…</div>';
+  adminApi("api/admin/newsletter/preview")
+    .then(function(data) {
+      if (box) box.innerHTML = '<iframe srcdoc="' + esc(data.html).replace(/"/g, "&quot;") + '" style="width:100%;height:450px;border:none;"></iframe>';
+      if (msg) {
+        if (data.harvests && data.harvests.length) {
+          showMsg("newsletterMsg", data.harvests.length + " Pflanze(n) erntereif: " + data.harvests.join(", "), "info");
+        } else {
+          showMsg("newsletterMsg", "Keine Ernte in den nächsten 2 Wochen geplant.", "warning");
+        }
+      }
+    })
+    .catch(function(err) {
+      if (box) box.innerHTML = '';
+      if (msg) showMsg("newsletterMsg", err.message || "Vorschau konnte nicht geladen werden.", "danger");
+    });
+}
+
+function sendNewsletter() {
+  if (!confirm("Newsletter wirklich an alle Abonnenten senden?")) return;
+  var btn = document.getElementById("newsletterSendBtn");
+  var msg = document.getElementById("newsletterMsg");
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sende…'; }
+  adminApi("api/admin/newsletter/send", "POST")
+    .then(function(data) {
+      if (msg) showMsg("newsletterMsg", "Newsletter erfolgreich an " + data.sent + " von " + data.total + " Abonnenten gesendet.", "success");
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send"></i> Newsletter senden'; }
+    })
+    .catch(function(err) {
+      if (msg) showMsg("newsletterMsg", err.message || "Senden fehlgeschlagen.", "danger");
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-send"></i> Newsletter senden'; }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  var previewBtn = document.getElementById("newsletterPreviewBtn");
+  if (previewBtn) previewBtn.addEventListener("click", loadNewsletterPreview);
+  var sendBtn = document.getElementById("newsletterSendBtn");
+  if (sendBtn) sendBtn.addEventListener("click", sendNewsletter);
+});
+
 // ---------------------------------------------------------------- customers
 
 var CUSTOMERS_QUERY = "";

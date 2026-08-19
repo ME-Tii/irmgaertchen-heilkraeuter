@@ -594,6 +594,33 @@
           Wird ein Template deaktiviert, wird die entsprechende E-Mail nicht versendet.
         </div>
         <div id="emailsMsg" class="alert d-none" role="alert"></div>
+
+        <div class="card mb-4 border-success">
+          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-envelope-paper"></i> Newsletter senden</span>
+            <span class="badge bg-white text-success">An Abonnenten</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">
+              Sendet den Newsletter an alle Kunden mit aktiviertem Newsletter-Empfang.
+              Enthält automatisch eine Übersicht der Pflanzen, die in den nächsten 2 Wochen erntereif sind.
+            </p>
+            <div id="newsletterMsg" class="alert d-none" role="alert"></div>
+            <div class="d-flex gap-2 mb-3">
+              <button class="btn btn-outline-irm btn-sm" id="newsletterPreviewBtn" type="button">
+                <i class="bi bi-eye"></i> Vorschau
+              </button>
+              <button class="btn btn-success btn-sm" id="newsletterSendBtn" type="button">
+                <i class="bi bi-send"></i> Newsletter senden
+              </button>
+            </div>
+            <div id="newsletterPreviewWrap" class="d-none">
+              <label class="form-label small fw-bold">E-Mail-Vorschau</label>
+              <div id="newsletterPreview" style="border:1px solid #dee2e6;border-radius:6px;overflow:hidden;max-height:500px;overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+
         <div id="emailsList"></div>
       </div>
 

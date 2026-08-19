@@ -67,6 +67,84 @@ def _send(subject, to, text, attachment=None):
             _log(to, subject, True, f"({SMTP_HOST}:{port})")
             return True
         except Exception as e:
+            errors.append(f"({SMTP_HOST}:{port}) {e}")
+    print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
+    _log(to, subject, False, " | ".join(errors))
+    return False
+
+
+def _send_html(subject, to, html, fallback_text=""):
+    if not email_enabled():
+        _log(to, subject, False, "SMTP nicht konfiguriert")
+        return False
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to
+    msg.set_content(fallback_text, subtype="plain", charset="utf-8")
+    msg.add_alternative(html, subtype="html", charset="utf-8")
+    candidates = [(SMTP_PORT, SMTP_PORT == 465)]
+    for port in FALLBACK_PORTS:
+        if port not in [c[0] for c in candidates]:
+            candidates.append((port, port == 465))
+    errors = []
+    for port, ssl in candidates:
+        try:
+            if ssl:
+                with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=20) as server:
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(SMTP_HOST, port, timeout=20) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            _log(to, subject, True, f"({SMTP_HOST}:{port})")
+            return True
+        except Exception as e:
+            errors.append(f"({SMTP_HOST}:{port}) {e}")
+    print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
+    _log(to, subject, False, " | ".join(errors))
+    return False
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to
+    msg.set_content(text, subtype="plain", charset="utf-8")
+    if attachment:
+        msg.add_attachment(
+            attachment["data"],
+            maintype="application",
+            subtype="pdf",
+            filename=attachment["filename"],
+        )
+    candidates = [(SMTP_PORT, SMTP_PORT == 465)]
+    for port in FALLBACK_PORTS:
+        if port not in [c[0] for c in candidates]:
+            candidates.append((port, port == 465))
+    errors = []
+    for port, ssl in candidates:
+        try:
+            if ssl:
+                with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=20) as server:
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(SMTP_HOST, port, timeout=20) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            _log(to, subject, True, f"({SMTP_HOST}:{port})")
+            return True
+        except Exception as e:
             # Nie den Bestellablauf blockieren, wenn das Mail nicht rausgeht.
             errors.append(f"({SMTP_HOST}:{port}) {e}")
     print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
@@ -269,3 +347,95 @@ def send_password_reset(user_email, name, reset_url):
             f"Ihr Irmgärtchen-Team"
         )
     _send(subject, user_email, text)
+
+
+def _build_harvest_html(harvests):
+    if not harvests:
+        return (
+            '<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">'
+            '<tr><td style="background:#f0f7f0;padding:16px 20px;border-radius:8px;text-align:center;">'
+            '<p style="margin:0;color:#3f6b3b;font-size:15px;">'
+            '<strong>Keine Ernte in den nächsten 2 Wochen geplant.</strong></p>'
+            '<p style="margin:6px 0 0;color:#666;font-size:13px;">Schau bald wieder vorbei!</p>'
+            '</td></tr></table>'
+        )
+    rows = ""
+    for h in harvests:
+        variety = f" ({esc(h['plant_variety'])})" if h.get("plant_variety") else ""
+        date = h.get("expected_harvest", "")
+        try:
+            from datetime import datetime
+            date_fmt = datetime.strptime(date, "%Y-%m-%d").strftime("%d.%m.%Y")
+        except Exception:
+            date_fmt = date
+        rows += (
+            '<tr>'
+            '<td style="padding:10px 16px;border-bottom:1px solid #e8efe8;">'
+            '<strong style="color:#3f6b3b;">' + esc(h.get("plant_name", "")) + variety + '</strong>'
+            '</td>'
+            '<td style="padding:10px 16px;border-bottom:1px solid #e8efe8;color:#666;font-size:13px;">'
+            + esc(h.get("name", "")) +
+            '</td>'
+            '<td style="padding:10px 16px;border-bottom:1px solid #e8efe8;text-align:right;font-weight:600;color:#3f6b3b;">'
+            + esc(date_fmt) +
+            '</td>'
+            '</tr>'
+        )
+    return (
+        '<h3 style="margin:20px 0 8px;color:#3f6b3b;font-size:17px;">'
+        '\U0001f33f Bald erntereif</h3>'
+        '<table width="100%" cellpadding="0" cellspacing="0" '
+        'style="border:1px solid #e8efe8;border-radius:8px;overflow:hidden;margin-bottom:16px;">'
+        '<thead><tr style="background:#f0f7f0;">'
+        '<th style="padding:10px 16px;text-align:left;font-size:13px;color:#3f6b3b;">Pflanze</th>'
+        '<th style="padding:10px 16px;text-align:left;font-size:13px;color:#3f6b3b;">Beet / Abschnitt</th>'
+        '<th style="padding:10px 16px;text-align:right;font-size:13px;color:#3f6b3b;">Ernte am</th>'
+        '</tr></thead><tbody>'
+        + rows +
+        '</tbody></table>'
+    )
+
+
+def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de"):
+    harvest_html = _build_harvest_html(harvests)
+    return (
+        '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1.0"></head>'
+        '<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,Helvetica,sans-serif;">'
+        '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:20px 0;">'
+        '<tr><td align="center">'
+        '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">'
+        '<!-- header -->'
+        '<tr><td style="background:#3f6b3b;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center;">'
+        '<h1 style="margin:0;color:#fff;font-size:22px;">Irmg&auml;rtchen Heilkr&auml;uter</h1>'
+        '<p style="margin:6px 0 0;color:#c8e6c9;font-size:13px;">Newsletter &middot; Ernte-News &amp; Tipps</p>'
+        '</td></tr>'
+        '<!-- body -->'
+        '<tr><td style="background:#ffffff;padding:28px 32px;">'
+        '<p style="margin:0 0 12px;font-size:15px;color:#333;">Hallo ' + esc(name) + ',</p>'
+        '<p style="margin:0 0 20px;font-size:15px;color:#333;">'
+        'willkommen bei unserem Newsletter! Hier erf&auml;hrst du, was gerade im Garten passiert.</p>'
+        + harvest_html +
+        '<!-- shop link -->'
+        '<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">'
+        '<tr><td align="center">'
+        '<a href="' + site_url + '" '
+        'style="display:inline-block;background:#3f6b3b;color:#fff;text-decoration:none;'
+        'padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600;">'
+        '\U0001f6d2 Zum Shop</a>'
+        '</td></tr></table>'
+        '<p style="margin:0;font-size:14px;color:#3f6b3b;">Viele Gr&uuml;&szlig;e,<br>Dein Irmg&auml;rtchen-Team</p>'
+        '</td></tr>'
+        '<!-- footer -->'
+        '<tr><td style="background:#f0f7f0;padding:16px 32px;border-radius:0 0 8px 8px;text-align:center;">'
+        '<p style="margin:0;font-size:11px;color:#888;">'
+        '&copy; 2026 Irmg&auml;rtchen Heilkr&auml;uter &middot; '
+        '<a href="' + site_url + '" style="color:#3f6b3b;">irmgaertchen.de</a></p>'
+        '</td></tr>'
+        '</table></td></tr></table>'
+        '</body></html>'
+    )
+
+
+def send_newsletter(subscriber, subject, html, plain_text):
+    return _send_html(subject, subscriber["email"], html, plain_text)

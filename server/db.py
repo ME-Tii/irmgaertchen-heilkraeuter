@@ -1478,6 +1478,19 @@ DEFAULT_EMAIL_TEMPLATES = [
         ),
         "enabled": 1,
     },
+    {
+        "key": "newsletter",
+        "name": "Newsletter",
+        "subject": "Irmgärtchen Newsletter – Ernte-News & Tipps",
+        "body": (
+            "Hallo {name},\n\n"
+            "hier kommt dein Newsletter von Irmgärtchen Heilkräuter!\n\n"
+            "{harvest_section}"
+            "Viele Grüße\n"
+            "Dein Irmgärtchen-Team"
+        ),
+        "enabled": 1,
+    },
 ]
 
 
@@ -1513,6 +1526,45 @@ def update_email_template(key, fields):
     vals = list(fields.values()) + [key]
     conn = get_conn()
     conn.execute(_sql(f"UPDATE email_templates SET {sets} WHERE key = %s"), vals)
+    conn.commit()
+    conn.close()
+
+
+def get_upcoming_harvests(days=14):
+    conn = get_conn()
+    now = time.strftime("%Y-%m-%d")
+    end = time.strftime("%Y-%m-%d", time.localtime(time.time() + days * 86400))
+    rows = conn.execute(
+        _sql(
+            "SELECT fs.name, fs.plant_name, fs.plant_variety, fs.expected_harvest, fp.name AS plan_name "
+            "FROM field_sections fs "
+            "JOIN field_plans fp ON fp.id = fs.plan_id "
+            "WHERE fs.expected_harvest IS NOT NULL AND fs.expected_harvest != '' "
+            "AND fs.expected_harvest >= %s AND fs.expected_harvest <= %s "
+            "ORDER BY fs.expected_harvest ASC"
+        ),
+        (now, end),
+    ).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows]
+
+
+def get_newsletter_subscribers():
+    conn = get_conn()
+    rows = conn.execute(
+        _sql("SELECT id, name, email FROM users WHERE newsletter = 1 AND email != '' AND email IS NOT NULL")
+    ).fetchall()
+    conn.close()
+    return [row_to_dict(r) for r in rows]
+
+
+def log_newsletter_send(recipient_count):
+    conn = get_conn()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    conn.execute(
+        _sql("INSERT INTO mail_log (recipient, subject, success, error, created_at) VALUES (%s, %s, %s, %s, %s)"),
+        ("[newsletter]", f"Newsletter an {recipient_count} Empfänger", True, "", now),
+    )
     conn.commit()
     conn.close()
 
