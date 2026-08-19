@@ -364,6 +364,7 @@ function renderDashboard() {
         "</td>" +
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
         '<td class="text-end">' +
+        '<a href="/api/admin/orders/' + esc(o.order_no) + '/invoice" class="btn btn-sm btn-outline-primary me-1" title="Rechnung herunterladen" target="_blank"><i class="bi bi-file-earmark-pdf"></i></a>' +
         (o.returnRequested && !o.returnProcessed
           ? '<button class="btn btn-sm btn-outline-warning return-done" data-order="' + esc(o.order_no) + '" title="Rückgabe als erledigt markieren"><i class="bi bi-check2-circle"></i></button> '
           : "") +

@@ -583,6 +583,11 @@ function renderConfirmation(order) {
     if (el) el.textContent = val;
   };
   set("confirmOrderId", order.order_no);
+  const invLink = document.getElementById("confirmInvoiceLink");
+  if (invLink) {
+    invLink.href = "/api/orders/" + encodeURIComponent(order.order_no) + "/invoice";
+    invLink.classList.remove("d-none");
+  }
   set("confirmStatus", orderStatus(order));
   set("confirmDate", orderDate(order).toLocaleString("de-DE"));
   const isDelivery = order.delivery && order.delivery.method === "delivery";
@@ -746,7 +751,7 @@ function renderOrders() {
       return `
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <strong>Bestellung ${orderNoEsc}</strong>
+          <div><strong>Bestellung ${orderNoEsc}</strong> <a href="/api/orders/${orderNoEsc}/invoice" class="btn btn-sm btn-outline-primary ms-2" title="Rechnung herunterladen" target="_blank"><i class="bi bi-file-earmark-pdf"></i> Rechnung</a></div>
           <span class="badge badge-bio">${orderStatus(o)}</span>
         </div>
         <div class="card-body">

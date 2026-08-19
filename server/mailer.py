@@ -17,7 +17,7 @@ def email_enabled():
 FALLBACK_PORTS = [2525, 465]
 
 
-def _send(subject, to, text):
+def _send(subject, to, text, attachment=None):
     if not email_enabled():
         _log(to, subject, False, "SMTP nicht konfiguriert")
         return False
@@ -26,6 +26,13 @@ def _send(subject, to, text):
     msg["From"] = SMTP_FROM
     msg["To"] = to
     msg.set_content(text, subtype="plain", charset="utf-8")
+    if attachment:
+        msg.add_attachment(
+            attachment["data"],
+            maintype="application",
+            subtype="pdf",
+            filename=attachment["filename"],
+        )
     candidates = [(SMTP_PORT, SMTP_PORT == 465)]
     for port in FALLBACK_PORTS:
         if port not in [c[0] for c in candidates]:
@@ -93,7 +100,7 @@ def _fmt_euro(value):
     return f"{value:.2f}".replace(".", ",")
 
 
-def notify_customer_order(order, user_email=None):
+def notify_customer_order(order, user_email=None, attachment=None):
     user_email = user_email or (order.get("customerEmail") or "")
     if not user_email:
         return
@@ -131,8 +138,8 @@ def notify_customer_order(order, user_email=None):
         lines.append(
             "Abholung: Wir rufen Sie an, sobald Ihre Bestellung zur Abholung bereit ist.\n\n"
         )
-    lines.append('Sie können den Status jederzeit unter „Mein Konto" einsehen.')
-    _send(subject, user_email, "".join(lines))
+    lines.append('Sie koennen den Status jederzeit unter "Mein Konto" einsehen.')
+    _send(subject, user_email, "".join(lines), attachment=attachment)
 
 
 def notify_customer_status(user_email, order_no, status):

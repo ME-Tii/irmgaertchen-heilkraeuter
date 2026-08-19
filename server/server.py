@@ -37,6 +37,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import db
 from products import shipping_fee_cents
 import mailer
+from invoice import generate_invoice_pdf
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
@@ -912,7 +913,13 @@ def _complete_paid_order(order, session_id, payment_intent):
             "discount": order.get("discount", 0),
         },
     )
-    mailer.notify_customer_order(order)
+    attachment = None
+    try:
+        buf = generate_invoice_pdf(order)
+        attachment = {"data": buf.getvalue(), "filename": f"Rechnung-{order['order_no']}.pdf"}
+    except Exception:
+        pass
+    mailer.notify_customer_order(order, attachment=attachment)
 
 
 @app.post("/api/stripe/webhook")
@@ -1133,6 +1140,41 @@ def admin_delete_order(order_no):
         db.restore_stock(json.loads(order.get("items_json") or "[]"))
     db.delete_order(order_no)
     return jsonify({"ok": True})
+
+
+@app.get("/api/admin/orders/<order_no>/invoice")
+def admin_order_invoice(order_no):
+    bad = _admin_ok(require_admin())
+    if bad:
+        return bad
+    order = db.get_order(order_no)
+    if not order:
+        return err("Bestellung nicht gefunden.", 404)
+    d = order_to_dict(order)
+    buf = generate_invoice_pdf(d)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Rechnung-{order_no}.pdf"'},
+    )
+
+
+@app.get("/api/orders/<order_no>/invoice")
+def customer_order_invoice(order_no):
+    order = db.get_order(order_no)
+    if not order:
+        return err("Bestellung nicht gefunden.", 404)
+    user = db.get_user_by_id(order["user_id"]) if order["user_id"] else None
+    session_user = require_auth()
+    if not session_user or (user and session_user["id"] != user["id"]):
+        return err("Nicht autorisiert.", 403)
+    d = order_to_dict(order)
+    buf = generate_invoice_pdf(d)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Rechnung-{order_no}.pdf"'},
+    )
 
 
 @app.get("/api/admin/messages")
