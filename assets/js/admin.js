@@ -392,10 +392,10 @@ function renderDashboard() {
         '<td><select class="form-select form-select-sm status-select" data-order="' + esc(o.order_no) + '">' + statusOptions + "</select></td>" +
         '<td class="text-end">' +
         '<button class="btn btn-sm btn-outline-primary me-1 invoice-download" data-order="' + esc(o.order_no) + '" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i></button>' +
-        (isShipping && o.labelStatus !== "label_created"
+        (isShipping && o.labelStatus !== "label_created" && false
           ? '<button class="btn btn-sm btn-outline-success me-1 fedex-create" data-order="' + esc(o.order_no) + '" title="FedEx Label erstellen"><i class="bi bi-box-seam"></i></button> '
           : "") +
-        (isShipping && (o.labelStatus === "label_created" || o.labelStatus === "paid")
+        (isShipping && (o.labelStatus === "label_created" || o.labelStatus === "paid") && false
           ? '<button class="btn btn-sm btn-outline-success me-1 fedex-download" data-order="' + esc(o.order_no) + '" title="FedEx Label herunterladen"><i class="bi bi-box-seam"></i></button> '
           : "") +
         (isShipping && o.labelTracking
