@@ -456,7 +456,7 @@ def send_newsletter(subscriber, subject, html, plain_text):
     return _send_html(subject, subscriber["email"], html, plain_text)
 
 
-def build_newsletter_for_subscriber(subscriber, harvests, site_url="https://irmgaertchen.de"):
+def build_newsletter_for_subscriber(subscriber, harvests, site_url="https://irmgaertchen.de", subject=""):
     name = subscriber.get("name") or subscriber.get("email", "").split("@")[0]
     html = build_newsletter_html(name, harvests, site_url, email=subscriber.get("email", ""))
     plain = (
@@ -471,4 +471,4 @@ def build_newsletter_for_subscriber(subscriber, harvests, site_url="https://irmg
     else:
         plain += "Keine Ernte in den nächsten 2 Wochen geplant.\n"
     plain += f"\nViele Grüße\nDein Irmgärtchen-Team\n\n{site_url}"
-    return subject, html, plain
+    return subject or "Irmgärtchen Newsletter – Ernte-News & Tipps", html, plain

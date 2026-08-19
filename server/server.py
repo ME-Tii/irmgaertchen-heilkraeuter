@@ -1376,7 +1376,7 @@ def admin_newsletter_send():
     subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
     sent = 0
     for sub in subscribers:
-        s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests)
+        s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests, subject=subject)
         if mailer.send_newsletter(sub, s, html, plain):
             sent += 1
     db.log_newsletter_send(sent)
@@ -2077,7 +2077,7 @@ def _newsletter_auto_send():
         subject = tpl["subject"] if tpl else "Irmgärtchen Newsletter – Ernte-News & Tipps"
         sent = 0
         for sub in subscribers:
-            s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests)
+            s, html, plain = mailer.build_newsletter_for_subscriber(sub, harvests, subject=subject)
             if mailer.send_newsletter(sub, s, html, plain):
                 sent += 1
         db.log_newsletter_send(sent)
