@@ -59,6 +59,26 @@ function api(path, method, body) {
   return fetch(path, opts).then(parseApiResponse);
 }
 
+function downloadAuthFile(path, filename) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = {};
+  if (token) headers["Authorization"] = "Bearer " + token;
+  fetch(path, { headers }).then(function(r) {
+    if (!r.ok) { r.json().then(function(d) { alert(d.error || "Fehler"); }).catch(function() { alert("Fehler"); }); return; }
+    return r.blob();
+  }).then(function(blob) {
+    if (!blob) return;
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+
 function getProduct(id) {
   return window.PRODUCTS.find((p) => p.id === id);
 }
@@ -585,7 +605,7 @@ function renderConfirmation(order) {
   set("confirmOrderId", order.order_no);
   const invLink = document.getElementById("confirmInvoiceLink");
   if (invLink) {
-    invLink.href = "/api/orders/" + encodeURIComponent(order.order_no) + "/invoice";
+    invLink.dataset.order = order.order_no;
     invLink.classList.remove("d-none");
   }
   set("confirmStatus", orderStatus(order));
@@ -751,7 +771,7 @@ function renderOrders() {
       return `
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <div><strong>Bestellung ${orderNoEsc}</strong> <a href="/api/orders/${orderNoEsc}/invoice" class="btn btn-sm btn-outline-primary ms-2" title="Rechnung herunterladen" target="_blank"><i class="bi bi-file-earmark-pdf"></i> Rechnung</a></div>
+          <div><strong>Bestellung ${orderNoEsc}</strong> <button type="button" class="btn btn-sm btn-outline-primary ms-2 invoice-download" data-order="${orderNoEsc}" title="Rechnung herunterladen"><i class="bi bi-file-earmark-pdf"></i> Rechnung</button></div>
           <span class="badge badge-bio">${orderStatus(o)}</span>
         </div>
         <div class="card-body">
@@ -783,6 +803,11 @@ function renderOrders() {
       </div>`;
     })
     .join("");
+  list.querySelectorAll(".invoice-download").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      downloadAuthFile("/api/orders/" + encodeURIComponent(btn.dataset.order) + "/invoice", "Rechnung-" + btn.dataset.order + ".pdf");
+    });
+  });
 }
 
 function refreshOrders() {
