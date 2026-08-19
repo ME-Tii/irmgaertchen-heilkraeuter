@@ -122,6 +122,36 @@ def _log(to, subject, ok, error):
         pass
 
 
+def _send_raw(msg, to, subject):
+    candidates = [(SMTP_PORT, SMTP_PORT == 465)]
+    for port in FALLBACK_PORTS:
+        if port not in [c[0] for c in candidates]:
+            candidates.append((port, port == 465))
+    errors = []
+    for port, ssl in candidates:
+        try:
+            if ssl:
+                with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=20) as server:
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(SMTP_HOST, port, timeout=20) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    if SMTP_USER:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+            _log(to, subject, True, f"({SMTP_HOST}:{port})")
+            return True
+        except Exception as e:
+            errors.append(f"({SMTP_HOST}:{port}) {e}")
+    print(f"[mailer] Versand fehlgeschlagen: {' | '.join(errors)}")
+    _log(to, subject, False, " | ".join(errors))
+    return False
+
+
 def notify_admin_order(order_no, total_euro, delivery_text, customer=None):
     if not ADMIN_EMAIL:
         return
@@ -412,8 +442,35 @@ def build_newsletter_html(name, harvests, site_url="https://irmgaertchen.de", em
     )
 
 
+_LOGO_BYTES = None
+_logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "img", "logo-irmgaertchen_weiss.png")
+try:
+    with open(_logo_path, "rb") as _f:
+        _LOGO_BYTES = _f.read()
+except Exception:
+    _LOGO_BYTES = None
+
+
 def send_newsletter(subscriber, subject, html, plain_text):
-    return _send_html(subject, subscriber["email"], html, plain_text)
+    if not email_enabled():
+        _log(subscriber["email"], subject, False, "SMTP nicht konfiguriert")
+        return False
+    import re
+    html = re.sub(r'src="[^"]*logo-irmgaertchen_weiss\.png"', 'src="cid:logo"', html)
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = subscriber["email"]
+    msg.set_content(plain_text, subtype="plain", charset="utf-8")
+    msg.add_alternative(html, subtype="html", charset="utf-8")
+    if _LOGO_BYTES:
+        msg.get_payload()[1].add_related(
+            _LOGO_BYTES,
+            maintype="image",
+            subtype="png",
+            cid="<logo>",
+        )
+    return _send_raw(msg, subscriber["email"], subject)
 
 
 def build_newsletter_for_subscriber(subscriber, harvests, site_url="https://irmgaertchen.de", subject=""):
