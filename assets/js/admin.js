@@ -3309,9 +3309,74 @@ function showCustomerDetail(userId) {
 
 var AUDIT_LOG_PAGE = 0;
 var AUDIT_LOG_PAGE_SIZE = 50;
+var IP_LABELS = {};
+
+function loadIpLabels() {
+  adminApi("api/admin/ip-labels")
+    .then(function(data) {
+      IP_LABELS = {};
+      var labels = data.labels || [];
+      for (var i = 0; i < labels.length; i++) {
+        IP_LABELS[labels[i].ip_address] = labels[i].label;
+      }
+      renderIpLabelsTable();
+    })
+    .catch(function() {});
+}
+
+function renderIpLabelsTable() {
+  var body = document.getElementById("ipLabelsBody");
+  if (!body) return;
+  var ips = Object.keys(IP_LABELS).sort();
+  if (!ips.length) {
+    body.innerHTML = '<tr><td colspan="3" class="text-muted text-center py-2 small">Noch keine Zuordnungen</td></tr>';
+    return;
+  }
+  var html = "";
+  for (var i = 0; i < ips.length; i++) {
+    html += "<tr>" +
+      "<td><code>" + esc(ips[i]) + "</code></td>" +
+      "<td>" + esc(IP_LABELS[ips[i]]) + "</td>" +
+      "<td><button class='btn btn-outline-danger btn-sm py-0' onclick='deleteIpLabel(\"" + esc(ips[i]) + "\")'><i class='bi bi-trash'></i></button></td>" +
+      "</tr>";
+  }
+  body.innerHTML = html;
+}
+
+function saveIpLabel() {
+  var ip = (document.getElementById("ipLabelIp").value || "").trim();
+  var name = (document.getElementById("ipLabelName").value || "").trim();
+  if (!ip) {
+    showMsg("ipLabelsMsg", "IP-Adresse eingeben.", "warning");
+    return;
+  }
+  adminApi("api/admin/ip-labels", "PUT", { ip_address: ip, label: name })
+    .then(function() {
+      document.getElementById("ipLabelIp").value = "";
+      document.getElementById("ipLabelName").value = "";
+      showMsg("ipLabelsMsg", "Gespeichert.", "success");
+      loadIpLabels();
+    })
+    .catch(function(err) {
+      showMsg("ipLabelsMsg", "Fehler: " + (err.message || err), "danger");
+    });
+}
+
+function deleteIpLabel(ip) {
+  if (!confirm("Zuordnung für " + ip + " löschen?")) return;
+  adminApi("api/admin/ip-labels/" + encodeURIComponent(ip), "DELETE")
+    .then(function() {
+      showMsg("ipLabelsMsg", "Gelöscht.", "success");
+      loadIpLabels();
+    })
+    .catch(function(err) {
+      showMsg("ipLabelsMsg", "Fehler: " + (err.message || err), "danger");
+    });
+}
 
 function loadAuditLog() {
   AUDIT_LOG_PAGE = 0;
+  loadIpLabels();
   _fetchAuditLog();
 }
 
@@ -3319,6 +3384,13 @@ function auditLogPage(dir) {
   AUDIT_LOG_PAGE += dir;
   if (AUDIT_LOG_PAGE < 0) AUDIT_LOG_PAGE = 0;
   _fetchAuditLog();
+}
+
+function _ipDisplay(ip) {
+  if (!ip) return '<span class="text-muted">–</span>';
+  var label = IP_LABELS[ip];
+  if (label) return '<code>' + esc(ip) + '</code> <small class="text-muted">(' + esc(label) + ')</small>';
+  return '<code>' + esc(ip) + '</code>';
 }
 
 function _fetchAuditLog() {
@@ -3358,7 +3430,7 @@ function _fetchAuditLog() {
             "<td class='text-nowrap small'>" + esc(ts) + "</td>" +
             "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" : '<span class="text-muted">–</span>') + "</td>" +
             "<td><span class='badge " + actionClass + "'>" + actionLabel + "</span></td>" +
-            "<td><code>" + esc(e.ip_address) + "</code></td>" +
+            "<td>" + _ipDisplay(e.ip_address) + "</td>" +
             "<td class='small text-muted'>" + esc(e.details || "") + "</td>" +
             "</tr>";
         }

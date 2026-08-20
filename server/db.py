@@ -222,6 +222,10 @@ SQLITE_SCHEMA = [
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL DEFAULT ''
     );""",
+    """CREATE TABLE IF NOT EXISTS ip_labels (
+        ip_address TEXT PRIMARY KEY,
+        label TEXT NOT NULL DEFAULT ''
+    );""",
     """CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT NOT NULL DEFAULT (datetime('now')),
@@ -416,6 +420,10 @@ PG_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS site_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL DEFAULT ''
+    );""",
+    """CREATE TABLE IF NOT EXISTS ip_labels (
+        ip_address TEXT PRIMARY KEY,
+        label TEXT NOT NULL DEFAULT ''
     );""",
     """CREATE TABLE IF NOT EXISTS audit_log (
         id SERIAL PRIMARY KEY,
@@ -1948,3 +1956,30 @@ def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
     count_row = conn.execute(_sql(count_sql), params[:len(conditions)]).fetchone()
     conn.close()
     return all_rows(rows), count_row["c"] if count_row else 0
+
+
+# ---- ip labels ----
+
+def get_ip_labels():
+    conn = get_conn()
+    rows = conn.execute(_sql("SELECT ip_address, label FROM ip_labels ORDER BY ip_address")).fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def upsert_ip_label(ip_address, label):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO ip_labels (ip_address, label) VALUES (%s, %s) "
+             "ON CONFLICT (ip_address) DO UPDATE SET label = excluded.label"),
+        (ip_address, label),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_ip_label(ip_address):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM ip_labels WHERE ip_address = %s"), (ip_address,))
+    conn.commit()
+    conn.close()

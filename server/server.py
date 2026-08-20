@@ -1866,6 +1866,40 @@ def admin_audit_log():
     return jsonify({"entries": entries, "total": total})
 
 
+@app.get("/api/admin/ip-labels")
+def admin_get_ip_labels():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    return jsonify({"labels": db.get_ip_labels()})
+
+
+@app.put("/api/admin/ip-labels")
+def admin_upsert_ip_label():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    data = request.get_json(force=True, silent=True) or {}
+    ip_address = (data.get("ip_address") or "").strip()
+    label = (data.get("label") or "").strip()
+    if not ip_address:
+        return jsonify({"error": "ip_address required"}), 400
+    db.upsert_ip_label(ip_address, label)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/ip-labels/<ip>")
+def admin_delete_ip_label(ip):
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    db.delete_ip_label(ip)
+    return jsonify({"ok": True})
+
+
 # ---------------------------------------------------------------- field plans / crop planner
 
 FIELD_IMG_ALLOW = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
