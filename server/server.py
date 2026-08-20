@@ -214,8 +214,9 @@ def check_ip_blacklist():
     try:
         if db.is_blacklisted(ip):
             return jsonify({"error": "Zugriff gesperrt."}), 403
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.error("Blacklist check failed: %s", e)
+        return jsonify({"error": "Zugriff gesperrt."}), 403
 
 
 # ---------------------------------------------------------------- audit logging
