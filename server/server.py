@@ -31,7 +31,7 @@ def load_env():
 load_env()
 
 import stripe
-from flask import Flask, Response, jsonify, request, redirect, render_template, send_from_directory
+from flask import Flask, Response, g, jsonify, request, redirect, render_template, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import db
@@ -208,11 +208,14 @@ def check_ip_blacklist():
     ext = os.path.splitext(path)[1].lower()
     if ext in _STATIC_EXT:
         return
-    if path.startswith("/api/admin/ip-blacklist"):
+    if path.startswith("/api/admin/ip-blacklist") or path.startswith("/api/admin/blacklist-settings"):
         return
     ip = _client_ip()
     try:
         if db.is_blacklisted(ip):
+            if db.get_setting("blacklist_test_mode", "0") == "1":
+                g.blacklist_test = True
+                return
             return jsonify({"error": "Zugriff gesperrt."}), 403
     except Exception as e:
         app.logger.error("Blacklist check failed: %s", e)
@@ -270,6 +273,28 @@ def track_page_view(response):
             db.record_visitor(visitor_id, day)
         except Exception:
             pass
+    return response
+
+
+@app.after_request
+def inject_blacklist_test_banner(response):
+    if not getattr(g, "blacklist_test", False):
+        return response
+    ct = response.content_type or ""
+    if "text/html" not in ct:
+        return response
+    banner = (
+        '<div style="background:#fff3cd;color:#856404;padding:10px 20px;text-align:center;'
+        'font-family:sans-serif;font-size:14px;border-bottom:2px solid #ffc107;">'
+        '<i class="bi bi-exclamation-triangle"></i> '
+        '<b>Test-Modus:</b> Du würdest normalerweise gesperrt werden. '
+        'Schalte den Test-Modus aus, um die Sperre zu aktivieren.</div>'
+    )
+    body = response.get_data(as_text=True)
+    if "<body" in body.lower():
+        body = body.replace("<body", "<body>" + banner, 1)
+        response.set_data(body)
+        response.content_type = ct
     return response
 
 
@@ -1952,6 +1977,26 @@ def admin_remove_from_blacklist(ip):
     if bad:
         return bad
     db.remove_from_blacklist(ip)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/admin/blacklist-settings")
+def admin_get_blacklist_settings():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    return jsonify({"test_mode": db.get_setting("blacklist_test_mode", "0") == "1"})
+
+
+@app.put("/api/admin/blacklist-settings")
+def admin_set_blacklist_settings():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    data = request.get_json(force=True, silent=True) or {}
+    db.set_setting("blacklist_test_mode", "1" if data.get("test_mode") else "0")
     return jsonify({"ok": True})
 
 

@@ -3418,6 +3418,7 @@ function _matchLabel(ip, ua) {
 }
 
 function loadBlacklist() {
+  loadBlacklistSettings();
   adminApi("api/admin/ip-blacklist")
     .then(function(data) {
       var entries = data.entries || [];
@@ -3438,6 +3439,29 @@ function loadBlacklist() {
           "</tr>";
       }
       body.innerHTML = html;
+    })
+    .catch(function() {});
+}
+
+function loadBlacklistSettings() {
+  adminApi("api/admin/blacklist-settings")
+    .then(function(data) {
+      var toggle = document.getElementById("blacklistTestToggle");
+      if (toggle && !toggle._bound) {
+        toggle._bound = true;
+        toggle.checked = !!data.test_mode;
+        toggle.addEventListener("change", function() {
+          adminApi("api/admin/blacklist-settings", "PUT", { test_mode: toggle.checked })
+            .then(function() {
+              showToast("Test-Modus " + (toggle.checked ? "aktiviert" : "deaktiviert") + ".");
+            })
+            .catch(function() {
+              toggle.checked = !toggle.checked;
+            });
+        });
+      } else if (toggle) {
+        toggle.checked = !!data.test_mode;
+      }
     })
     .catch(function() {});
 }

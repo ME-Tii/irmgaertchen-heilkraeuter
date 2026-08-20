@@ -681,6 +681,10 @@
           <div class="collapse" id="ipBlacklistCollapse">
             <div class="card-body py-2">
               <p class="text-muted small mb-2">Gesperrte IP-Adressen haben keinen Zugriff auf die Seite.</p>
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="blacklistTestToggle">
+                <label class="form-check-label small fw-semibold" for="blacklistTestToggle">Test-Modus (Sperre nur simulieren, kein echter Block)</label>
+              </div>
               <div id="ipBlacklistMsg" class="alert d-none py-1 mb-2" role="alert"></div>
               <div class="row g-2 align-items-end mb-2">
                 <div class="col-auto">
