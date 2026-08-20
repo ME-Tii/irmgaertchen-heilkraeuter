@@ -222,6 +222,18 @@ SQLITE_SCHEMA = [
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL DEFAULT ''
     );""",
+    """CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+        user_id INTEGER,
+        username TEXT NOT NULL DEFAULT '',
+        action TEXT NOT NULL,
+        entity TEXT NOT NULL DEFAULT '',
+        entity_id TEXT NOT NULL DEFAULT '',
+        details TEXT NOT NULL DEFAULT '',
+        ip_address TEXT NOT NULL DEFAULT '',
+        user_agent TEXT NOT NULL DEFAULT ''
+    );""",
 ]
 
 PG_SCHEMA = [
@@ -404,6 +416,18 @@ PG_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS site_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL DEFAULT ''
+    );""",
+    """CREATE TABLE IF NOT EXISTS audit_log (
+        id SERIAL PRIMARY KEY,
+        timestamp TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        user_id INTEGER,
+        username TEXT NOT NULL DEFAULT '',
+        action TEXT NOT NULL,
+        entity TEXT NOT NULL DEFAULT '',
+        entity_id TEXT NOT NULL DEFAULT '',
+        details TEXT NOT NULL DEFAULT '',
+        ip_address TEXT NOT NULL DEFAULT '',
+        user_agent TEXT NOT NULL DEFAULT ''
     );""",
 ]
 
@@ -1887,3 +1911,40 @@ def find_order_by_notify_token(token):
     ).fetchone()
     conn.close()
     return row["order_no"] if row else None
+
+
+# ---- audit log ----
+
+def log_audit(action, entity="", entity_id="", details="", user_id=None, username="", ip_address="", user_agent=""):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO audit_log (user_id, username, action, entity, entity_id, details, ip_address, user_agent) "
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"),
+        (user_id, username, action, entity, entity_id, details, ip_address, user_agent),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
+    conn = get_conn()
+    sql = "SELECT * FROM audit_log"
+    params = []
+    conditions = []
+    if action_filter:
+        conditions.append("action = %s")
+        params.append(action_filter)
+    if user_filter:
+        conditions.append("username = %s")
+        params.append(user_filter)
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY id DESC LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+    rows = conn.execute(_sql(sql), params).fetchall()
+    count_sql = "SELECT COUNT(*) AS c FROM audit_log"
+    if conditions:
+        count_sql += " WHERE " + " AND ".join(conditions)
+    count_row = conn.execute(_sql(count_sql), params[:len(conditions)]).fetchone()
+    conn.close()
+    return all_rows(rows), count_row["c"] if count_row else 0

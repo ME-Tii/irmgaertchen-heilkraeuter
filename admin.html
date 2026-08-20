@@ -66,6 +66,7 @@
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="backup" onclick="switchTab('backup')"><i class="bi bi-hdd"></i> Sicherung</button></li>
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="coupons" onclick="switchTab('coupons')"><i class="bi bi-tag"></i> Gutscheine</button></li>
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="emails" onclick="switchTab('emails')"><i class="bi bi-envelope-gear"></i> E-Mails</button></li>
+        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="auditlog" onclick="switchTab('auditlog')"><i class="bi bi-shield-lock"></i> Protokoll</button></li>
       </ul>
 
       <div id="ordersPanel">
@@ -642,6 +643,63 @@
         <div id="emailsList"></div>
       </div>
 
+      <div id="auditlogPanel" class="d-none">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <h2 class="h5 mb-0"><i class="bi bi-shield-lock"></i> Sicherheitsprotokoll</h2>
+          <button class="btn btn-outline-irm btn-sm" type="button" onclick="loadAuditLog()"><i class="bi bi-arrow-clockwise"></i> Aktualisieren</button>
+        </div>
+        <p class="text-muted small mb-3">Alle Anmeldeversuche, Admin-Änderungen und Seitenaufrufe mit IP-Adressen.</p>
+
+        <div class="row g-2 mb-3 align-items-end flex-wrap">
+          <div class="col-auto">
+            <label for="auditActionFilter" class="form-label small">Aktion</label>
+            <select class="form-select form-select-sm" id="auditActionFilter" style="min-width:180px;">
+              <option value="">Alle Aktionen</option>
+              <option value="login">Login</option>
+              <option value="login_failed">Login fehlgeschlagen</option>
+              <option value="logout">Logout</option>
+              <option value="register">Registrierung</option>
+              <option value="forgot_password">Passwort vergessen</option>
+              <option value="password_reset">Passwort zurückgesetzt</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label for="auditUserFilter" class="form-label small">Benutzer</label>
+            <input type="text" class="form-control form-control-sm" id="auditUserFilter" placeholder="Benutzername" style="min-width:140px;">
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-irm btn-sm" type="button" onclick="loadAuditLog()"><i class="bi bi-funnel"></i> Filtern</button>
+          </div>
+        </div>
+
+        <div id="auditLogMsg" class="alert d-none" role="alert"></div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle" id="auditLogTable">
+            <thead class="table-light">
+              <tr>
+                <th style="white-space:nowrap;">Zeit</th>
+                <th>Benutzer</th>
+                <th>Aktion</th>
+                <th>IP-Adresse</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="auditLogBody">
+              <tr><td colspan="5" class="text-muted text-center py-3">Lade...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-2">
+          <small class="text-muted" id="auditLogInfo"></small>
+          <div class="btn-group btn-group-sm" id="auditLogPaging">
+            <button class="btn btn-outline-secondary" type="button" id="auditPrevBtn" onclick="auditLogPage(-1)" disabled><i class="bi bi-chevron-left"></i> Zurück</button>
+            <button class="btn btn-outline-secondary" type="button" id="auditNextBtn" onclick="auditLogPage(1)" disabled>Weiter <i class="bi bi-chevron-right"></i></button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 
@@ -758,6 +816,6 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="assets/js/products.js?v=6"></script>
-  <script src="assets/js/admin.js?v=9"></script>
+  <script src="assets/js/admin.js?v=10"></script>
 </body>
 </html>

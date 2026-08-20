@@ -139,6 +139,7 @@ function switchTab(tab) {
   const backupPanel = document.getElementById("backupPanel");
   const couponsPanel = document.getElementById("couponsPanel");
   const emailsPanel = document.getElementById("emailsPanel");
+  const auditlogPanel = document.getElementById("auditlogPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (customersPanel) customersPanel.classList.toggle("d-none", tab !== "customers");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
@@ -148,6 +149,7 @@ function switchTab(tab) {
   if (backupPanel) backupPanel.classList.toggle("d-none", tab !== "backup");
   if (couponsPanel) couponsPanel.classList.toggle("d-none", tab !== "coupons");
   if (emailsPanel) emailsPanel.classList.toggle("d-none", tab !== "emails");
+  if (auditlogPanel) auditlogPanel.classList.toggle("d-none", tab !== "auditlog");
   try {
     if (tab === "customers") loadCustomers();
     if (tab === "inventory") renderInventory();
@@ -156,6 +158,7 @@ function switchTab(tab) {
     if (tab === "fieldplan") loadFieldPlans();
     if (tab === "coupons") renderCoupons();
     if (tab === "emails") loadEmailTemplates();
+    if (tab === "auditlog") loadAuditLog();
   } catch (e) {
     console.error("Tab-Fehler:", e);
     showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
@@ -3299,5 +3302,76 @@ function showCustomerDetail(userId) {
     })
     .catch(function(err) {
       body.innerHTML = '<div class="alert alert-danger">' + esc(err.message) + "</div>";
+    });
+}
+
+// ---------------------------------------------------------------- audit log
+
+var AUDIT_LOG_PAGE = 0;
+var AUDIT_LOG_PAGE_SIZE = 50;
+
+function loadAuditLog() {
+  AUDIT_LOG_PAGE = 0;
+  _fetchAuditLog();
+}
+
+function auditLogPage(dir) {
+  AUDIT_LOG_PAGE += dir;
+  if (AUDIT_LOG_PAGE < 0) AUDIT_LOG_PAGE = 0;
+  _fetchAuditLog();
+}
+
+function _fetchAuditLog() {
+  var action = document.getElementById("auditActionFilter") ? document.getElementById("auditActionFilter").value : "";
+  var user = document.getElementById("auditUserFilter") ? document.getElementById("auditUserFilter").value : "";
+  var offset = AUDIT_LOG_PAGE * AUDIT_LOG_PAGE_SIZE;
+  var url = "api/admin/audit-log?limit=" + AUDIT_LOG_PAGE_SIZE + "&offset=" + offset;
+  if (action) url += "&action=" + encodeURIComponent(action);
+  if (user) url += "&user=" + encodeURIComponent(user);
+
+  adminApi(url)
+    .then(function(data) {
+      var entries = data.entries || [];
+      var total = data.total || 0;
+      var body = document.getElementById("auditLogBody");
+      var info = document.getElementById("auditLogInfo");
+      var prevBtn = document.getElementById("auditPrevBtn");
+      var nextBtn = document.getElementById("auditNextBtn");
+
+      if (!entries.length) {
+        body.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3"><i class="bi bi-inbox"></i> Keine Einträge vorhanden</td></tr>';
+      } else {
+        var html = "";
+        for (var i = 0; i < entries.length; i++) {
+          var e = entries[i];
+          var ts = e.timestamp || "";
+          var actionLabel = esc(e.action);
+          var actionClass = "bg-secondary";
+          if (e.action === "login") actionClass = "bg-success";
+          else if (e.action === "login_failed") actionClass = "bg-danger";
+          else if (e.action === "logout") actionClass = "bg-warning text-dark";
+          else if (e.action.indexOf("gelöscht") !== -1 || e.action.indexOf("geloescht") !== -1) actionClass = "bg-danger";
+          else if (e.action.indexOf("erstellt") !== -1) actionClass = "bg-primary";
+          else if (e.action.indexOf("aktualisiert") !== -1 || e.action.indexOf("bearbeitet") !== -1) actionClass = "bg-info";
+
+          html += "<tr>" +
+            "<td class='text-nowrap small'>" + esc(ts) + "</td>" +
+            "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" : '<span class="text-muted">–</span>') + "</td>" +
+            "<td><span class='badge " + actionClass + "'>" + actionLabel + "</span></td>" +
+            "<td><code>" + esc(e.ip_address) + "</code></td>" +
+            "<td class='small text-muted'>" + esc(e.details || "") + "</td>" +
+            "</tr>";
+        }
+        body.innerHTML = html;
+      }
+
+      var from = total > 0 ? offset + 1 : 0;
+      var to = Math.min(offset + AUDIT_LOG_PAGE_SIZE, total);
+      info.textContent = from + "–" + to + " von " + total + " Einträgen";
+      prevBtn.disabled = AUDIT_LOG_PAGE === 0;
+      nextBtn.disabled = to >= total;
+    })
+    .catch(function(err) {
+      showMsg("auditLogMsg", "Fehler beim Laden: " + (err.message || err), "danger");
     });
 }

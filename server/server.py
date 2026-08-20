@@ -157,6 +157,18 @@ def require_auth():
     return user
 
 
+def _audit(action, entity="", entity_id="", details="", user=None):
+    ip = _client_ip()
+    ua = request.headers.get("User-Agent", "")[:200]
+    uid = user["id"] if user else None
+    uname = user["username"] if user else ""
+    try:
+        db.log_audit(action=action, entity=entity, entity_id=entity_id, details=details,
+                     user_id=uid, username=uname, ip_address=ip, user_agent=ua)
+    except Exception:
+        pass
+
+
 def require_admin():
     user = require_auth()
     if not user:
@@ -183,6 +195,31 @@ def handle_500(e):
     if request.path.startswith("/api/"):
         return err("Interner Serverfehler.", 500)
     raise e
+
+
+# ---------------------------------------------------------------- audit logging
+
+_STATIC_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".css", ".js", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm"}
+
+
+@app.before_request
+def audit_log_request():
+    path = request.path
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _STATIC_EXT:
+        return
+    if path in ("/robots.txt", "/sitemap.xml", "/favicon.ico", "/api/health"):
+        return
+    ip = _client_ip()
+    ua = request.headers.get("User-Agent", "")[:200]
+    user = require_auth()
+    uid = user["id"] if user else None
+    uname = user["username"] if user else ""
+    action = f"{request.method} {path}"
+    try:
+        db.log_audit(action=action, user_id=uid, username=uname, ip_address=ip, user_agent=ua)
+    except Exception:
+        pass
 
 
 @app.after_request
@@ -489,15 +526,19 @@ def auth_google_callback():
         return resp
 
     if request.args.get("error"):
+        _audit("login_failed", entity="user", details="Google OAuth: access_denied")
         return clear(redirect(f"{target}#google_error=access_denied"))
     state = request.args.get("state", "")
     if not state or not hmac.compare_digest(state, request.cookies.get("google_oauth_state", "")):
+        _audit("login_failed", entity="user", details="Google OAuth: invalid_state")
         return clear(redirect(f"{target}#google_error=invalid_state"))
     info = _google_fetch_userinfo(request.args.get("code", ""))
     if not info:
+        _audit("login_failed", entity="user", details="Google OAuth: oauth_failed")
         return clear(redirect(f"{target}#google_error=oauth_failed"))
     email = (info.get("email") or "").lower()
     if not _is_valid_email(email):
+        _audit("login_failed", entity="user", details="Google OAuth: no_email")
         return clear(redirect(f"{target}#google_error=no_email"))
     user = db.get_user_by_email_ci(email)
     if not user:
@@ -510,6 +551,7 @@ def auth_google_callback():
             db.update_profile(user["id"], name, email, "")
     token = secrets.token_hex(32)
     db.create_session(token, user["id"])
+    _audit("login", entity="user", entity_id=user["username"], details="Google OAuth", user=user)
     fragment = f"google_token={token}&google_user={quote(user['username'])}"
     return clear(redirect(f"{target}#{fragment}"))
 
@@ -534,6 +576,7 @@ def register():
     user_id = db.create_user(username, email, generate_password_hash(password), newsletter)
     token = secrets.token_hex(32)
     db.create_session(token, user_id)
+    _audit("register", entity="user", entity_id=username)
     return jsonify({"token": token, "username": username, "email": email})
 
 
@@ -546,9 +589,11 @@ def login():
     password = data.get("password") or ""
     user = db.get_user_by_username(username)
     if not user or not check_password_hash(user["password_hash"], password):
+        _audit("login_failed", entity="user", entity_id=username, details="Falsches Passwort oder unbekannter Benutzer")
         return err("Benutzername oder Passwort ist falsch.", 401)
     token = secrets.token_hex(32)
     db.create_session(token, user["id"])
+    _audit("login", entity="user", entity_id=username, user=user)
     return jsonify(
         {
             "token": token,
@@ -564,9 +609,11 @@ def login():
 
 @app.post("/api/logout")
 def logout():
+    user = require_auth()
     token = bearer_token()
     if token:
         db.delete_session(token)
+    _audit("logout", entity="user", entity_id=user["username"] if user else "", user=user)
     return jsonify({"ok": True})
 
 
@@ -699,6 +746,7 @@ def forgot_password():
             user.get("name") or user["username"],
             f"{DOMAIN}/forgot-password.html?token={token}",
         )
+        _audit("forgot_password", entity="user", entity_id=user["username"], user=user)
     return jsonify({"ok": True})
 
 
@@ -725,6 +773,8 @@ def reset_password():
     db.set_user_password(rec["user_id"], generate_password_hash(password))
     db.consume_password_reset(token)
     db.delete_user_sessions(rec["user_id"])
+    reset_user = db.get_user_by_id(rec["user_id"])
+    _audit("password_reset", entity="user", entity_id=reset_user["username"] if reset_user else "", user=reset_user)
     return jsonify({"ok": True})
 
 
@@ -1076,7 +1126,8 @@ def _admin_ok(user):
 
 @app.get("/api/admin/orders")
 def admin_orders():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     out = []
@@ -1090,7 +1141,8 @@ def admin_orders():
 
 @app.patch("/api/admin/orders/<order_no>")
 def admin_update_order(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -1105,24 +1157,28 @@ def admin_update_order(order_no):
         user = db.get_user_by_id(order["user_id"]) if order["user_id"] else None
         if user:
             mailer.notify_customer_status(user["email"], order_no, status)
+    _audit("Bestellung aktualisiert", "bestellung", order_no, f"Status: {status}", user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/orders/<order_no>/return-done")
 def admin_return_done(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     order = db.get_order(order_no)
     if not order:
         return err("Bestellung nicht gefunden.", 404)
     db.update_order(order_no, {"return_processed": 1})
+    _audit("Rücksendung bearbeitet", "bestellung", order_no, user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/orders/<order_no>/refund")
 def admin_refund(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     if not STRIPE_SECRET_KEY:
@@ -1152,12 +1208,14 @@ def admin_refund(order_no):
             "stripe_refund_id": refund.id,
         },
     )
+    _audit("Erstattung durchgeführt", "bestellung", order_no, f"Refund-ID: {refund.id}", user=admin_user)
     return jsonify({"ok": True, "refund_id": refund.id, "amount": refund.amount})
 
 
 @app.delete("/api/admin/orders/<order_no>")
 def admin_delete_order(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     order = db.get_order(order_no)
@@ -1166,12 +1224,14 @@ def admin_delete_order(order_no):
     if order["status"] != "Zahlung ausstehend":
         db.restore_stock(json.loads(order.get("items_json") or "[]"))
     db.delete_order(order_no)
+    _audit("Bestellung gelöscht", "bestellung", order_no, user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.get("/api/admin/orders/<order_no>/invoice")
 def admin_order_invoice(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     order = db.get_order(order_no)
@@ -1206,7 +1266,8 @@ def customer_order_invoice(order_no):
 
 @app.get("/api/admin/orders/<order_no>/address-label")
 def admin_order_address_label(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     order = db.get_order(order_no)
@@ -1223,7 +1284,8 @@ def admin_order_address_label(order_no):
 
 @app.get("/api/admin/orders/<order_no>/packing-slip")
 def admin_order_packing_slip(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     order = db.get_order(order_no)
@@ -1240,7 +1302,8 @@ def admin_order_packing_slip(order_no):
 
 @app.get("/api/admin/messages")
 def admin_messages():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify({"messages": [msg_to_dict(m) for m in db.list_contact_messages()]})
@@ -1248,19 +1311,23 @@ def admin_messages():
 
 @app.post("/api/admin/messages/<int:message_id>/read")
 def admin_message_read(message_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     db.mark_contact_message_read(message_id)
+    _audit("Nachricht als gelesen markiert", "nachricht", str(message_id), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.delete("/api/admin/messages/<int:message_id>")
 def admin_delete_message(message_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     db.delete_contact_message(message_id)
+    _audit("Nachricht gelöscht", "nachricht", str(message_id), user=admin_user)
     return jsonify({"ok": True})
 
 
@@ -1269,7 +1336,8 @@ def admin_delete_message(message_id):
 
 @app.get("/api/admin/coupons")
 def admin_list_coupons():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify({"coupons": db.list_coupons()})
@@ -1277,7 +1345,8 @@ def admin_list_coupons():
 
 @app.post("/api/admin/coupons")
 def admin_add_coupon():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -1301,12 +1370,14 @@ def admin_add_coupon():
     if db.get_coupon(code):
         return err("Dieser Code ist bereits vergeben.", 400)
     cid = db.add_coupon(code, dtype, value, min_total, max_uses, valid_from, valid_until)
+    _audit("Gutschein erstellt", "gutschein", code, f"Typ: {dtype}, Wert: {value}", user=admin_user)
     return jsonify({"ok": True, "id": cid})
 
 
 @app.put("/api/admin/coupons/<int:coupon_id>")
 def admin_update_coupon(coupon_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     coupon = db.get_coupon_by_id(coupon_id)
@@ -1336,15 +1407,18 @@ def admin_update_coupon(coupon_id):
         fields["active"] = int(bool(data["active"]))
     if fields:
         db.update_coupon(coupon_id, fields)
+    _audit("Gutschein aktualisiert", "gutschein", str(coupon_id), json.dumps(fields, ensure_ascii=False), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.delete("/api/admin/coupons/<int:coupon_id>")
 def admin_delete_coupon(coupon_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     db.delete_coupon(coupon_id)
+    _audit("Gutschein gelöscht", "gutschein", str(coupon_id), user=admin_user)
     return jsonify({"ok": True})
 
 
@@ -1353,7 +1427,8 @@ def admin_delete_coupon(coupon_id):
 
 @app.get("/api/admin/email-templates")
 def admin_list_email_templates():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify({"templates": db.list_email_templates()})
@@ -1361,7 +1436,8 @@ def admin_list_email_templates():
 
 @app.get("/api/admin/email-templates/<key>")
 def admin_get_email_template(key):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     tpl = db.get_email_template(key)
@@ -1372,7 +1448,8 @@ def admin_get_email_template(key):
 
 @app.put("/api/admin/email-templates/<key>")
 def admin_update_email_template(key):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     tpl = db.get_email_template(key)
@@ -1388,12 +1465,14 @@ def admin_update_email_template(key):
         fields["enabled"] = 1 if data["enabled"] else 0
     if fields:
         db.update_email_template(key, fields)
+    _audit("E-Mail-Vorlage bearbeitet", "e_mail_vorlage", key, json.dumps(fields, ensure_ascii=False), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.get("/api/admin/newsletter/preview")
 def admin_newsletter_preview():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     harvests = db.get_upcoming_harvests(14)
@@ -1409,7 +1488,8 @@ def admin_newsletter_preview():
 
 @app.post("/api/admin/newsletter/send")
 def admin_newsletter_send():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     if not mailer.email_enabled():
@@ -1432,6 +1512,7 @@ def admin_newsletter_send():
             except Exception as sub_err:
                 print(f"[newsletter] Fehler an {sub.get('email', '?')}: {sub_err}")
         db.log_newsletter_send(sent)
+        _audit("Newsletter gesendet", "newsletter", "", f"An: {sent}/{len(subscribers)}", user=admin_user)
         return jsonify({"ok": True, "sent": sent, "total": len(subscribers)})
     except Exception as e:
         print(f"[newsletter] Send-Fehler: {e}")
@@ -1454,7 +1535,8 @@ FEDEX_SERVICES = [
 
 @app.get("/api/admin/dhl/config")
 def admin_dhl_config_get():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify(db.get_dhl_config() or {})
@@ -1462,17 +1544,20 @@ def admin_dhl_config_get():
 
 @app.post("/api/admin/dhl/config")
 def admin_dhl_config_save():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
     db.save_dhl_config(data)
+    _audit("Versand-Konfiguration gespeichert", "versand_konfig", "", user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.get("/api/admin/dhl/products")
 def admin_dhl_products():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify(FEDEX_SERVICES)
@@ -1480,7 +1565,8 @@ def admin_dhl_products():
 
 @app.post("/api/admin/orders/<order_no>/dhl-label")
 def admin_dhl_create_label(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     if not fedex_api.enabled():
@@ -1527,7 +1613,8 @@ def admin_dhl_create_label(order_no):
 
 @app.get("/api/admin/orders/<order_no>/dhl-label")
 def admin_dhl_download_label(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     pdf = db.get_order_label_pdf(order_no)
@@ -1542,7 +1629,8 @@ def admin_dhl_download_label(order_no):
 
 @app.get("/api/admin/orders/<order_no>/dhl-status")
 def admin_dhl_order_status(order_no):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     dhl = db.get_order_dhl(order_no)
@@ -1551,7 +1639,8 @@ def admin_dhl_order_status(order_no):
 
 @app.get("/api/admin/products")
 def admin_products():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     out = []
@@ -1575,7 +1664,8 @@ def admin_products():
 
 @app.post("/api/admin/products")
 def admin_add_product():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -1603,12 +1693,14 @@ def admin_add_product():
     if image and not SAFE_FILENAME_RE.match(image):
         return err("Ungültiger Bilddateiname.", 400)
     db.add_product(slug, name, category, price_cents, stock, desc, image, sell_per_kg)
+    _audit("Produkt erstellt", "produkt", slug, f"Name: {name}", user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.patch("/api/admin/products/<slug>")
 def admin_update_product(slug):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -1640,12 +1732,14 @@ def admin_update_product(slug):
     if image and not SAFE_FILENAME_RE.match(image):
         return err("Ungültiger Bilddateiname.", 400)
     db.update_product(slug, name, category, price_cents, stock, desc, image, sell_per_kg)
+    _audit("Produkt aktualisiert", "produkt", slug, json.dumps({k: v for k, v in data.items() if k in ("name","category","price","stock","desc","sell_per_kg")}, ensure_ascii=False), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/products/<slug>/image")
 def admin_upload_product_image(slug):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     product = db.get_product(slug)
@@ -1669,15 +1763,18 @@ def admin_upload_product_image(slug):
     with open(os.path.join(IMG_DIR, filename), "wb") as out:
         out.write(data)
     db.set_product_image(slug, filename)
+    _audit("Produktbild hochgeladen", "produkt", slug, f"Datei: {filename}", user=admin_user)
     return jsonify({"ok": True, "image": filename})
 
 
 @app.delete("/api/admin/products/<slug>")
 def admin_delete_product(slug):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     db.delete_product(slug)
+    _audit("Produkt gelöscht", "produkt", slug, user=admin_user)
     return jsonify({"ok": True})
 
 
@@ -1686,7 +1783,8 @@ def admin_delete_product(slug):
 
 @app.get("/api/admin/customers")
 def admin_list_customers():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     customers = db.list_all_customers()
@@ -1710,7 +1808,8 @@ def admin_list_customers():
 
 @app.get("/api/admin/customers/<int:user_id>")
 def admin_get_customer(user_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     user = db.get_user_by_id(user_id)
@@ -1746,10 +1845,25 @@ def admin_get_customer(user_id):
 
 @app.get("/api/admin/stats")
 def admin_stats():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify(db.get_view_stats())
+
+
+@app.get("/api/admin/audit-log")
+def admin_audit_log():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    limit = min(int(request.args.get("limit", 100)), 500)
+    offset = max(int(request.args.get("offset", 0)), 0)
+    action_filter = request.args.get("action", "")
+    user_filter = request.args.get("user", "")
+    entries, total = db.get_audit_log(limit=limit, offset=offset, action_filter=action_filter, user_filter=user_filter)
+    return jsonify({"entries": entries, "total": total})
 
 
 # ---------------------------------------------------------------- field plans / crop planner
@@ -1759,7 +1873,8 @@ FIELD_IMG_ALLOW = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 @app.get("/api/admin/field-plans")
 def admin_list_field_plans():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plans = db.list_field_plans()
@@ -1774,7 +1889,8 @@ def admin_list_field_plans():
 
 @app.post("/api/admin/field-plans")
 def admin_create_field_plan():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -1782,12 +1898,14 @@ def admin_create_field_plan():
     if not name:
         return err("Bitte einen Namen angeben.", 400)
     plan_id = db.create_field_plan(name)
+    _audit("Anbauplan erstellt", "anbauplan", name, user=admin_user)
     return jsonify({"ok": True, "id": plan_id})
 
 
 @app.get("/api/admin/field-plans/<int:plan_id>")
 def admin_get_field_plan(plan_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plan = db.get_field_plan(plan_id)
@@ -1803,7 +1921,8 @@ def admin_get_field_plan(plan_id):
 
 @app.put("/api/admin/field-plans/<int:plan_id>")
 def admin_update_field_plan(plan_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plan = db.get_field_plan(plan_id)
@@ -1818,24 +1937,28 @@ def admin_update_field_plan(plan_id):
     if "height_meters" in data:
         fields["height_meters"] = data["height_meters"]
     db.update_field_plan(plan_id, fields)
+    _audit("Anbauplan aktualisiert", "anbauplan", str(plan_id), json.dumps(fields, ensure_ascii=False), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.delete("/api/admin/field-plans/<int:plan_id>")
 def admin_delete_field_plan(plan_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plan = db.get_field_plan(plan_id)
     if not plan:
         return err("Plan nicht gefunden.", 404)
     db.delete_field_plan(plan_id)
+    _audit("Anbauplan gelöscht", "anbauplan", str(plan_id), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/field-plans/<int:plan_id>/image")
 def admin_upload_field_plan_image(plan_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plan = db.get_field_plan(plan_id)
@@ -1856,6 +1979,7 @@ def admin_upload_field_plan_image(plan_id):
     b64 = base64.b64encode(data).decode("ascii")
     filename = f"fieldplan-{plan_id}{ext}"
     db.update_field_plan(plan_id, {"image": filename, "image_data": b64, "image_mime": mime})
+    _audit("Anbauplan-Bild hochgeladen", "anbauplan", str(plan_id), f"Datei: {filename}", user=admin_user)
     return jsonify({"ok": True, "image": filename})
 
 
@@ -1871,7 +1995,8 @@ def serve_field_plan_image(plan_id):
 
 @app.post("/api/admin/field-plans/<int:plan_id>/calibrate")
 def admin_calibrate_field_plan(plan_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plan = db.get_field_plan(plan_id)
@@ -1900,12 +2025,14 @@ def admin_calibrate_field_plan(plan_id):
     else:
         return err("Ungültige Kalibrierungsdaten.", 400)
     db.update_field_plan(plan_id, fields)
+    _audit("Anbauplan kalibriert", "anbauplan", str(plan_id), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/field-plans/<int:plan_id>/sections")
 def admin_create_field_section(plan_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     plan = db.get_field_plan(plan_id)
@@ -1920,12 +2047,14 @@ def admin_create_field_section(plan_id):
     if data.get("growth_stage") and data["growth_stage"] not in GROWTH_STAGES:
         data["growth_stage"] = "Saaten"
     section_id = db.create_field_section(plan_id, data)
+    _audit("Anbau-Bereich erstellt", "anbau_section", str(plan_id), user=admin_user)
     return jsonify({"ok": True, "id": section_id})
 
 
 @app.put("/api/admin/field-plans/<int:plan_id>/sections/<int:section_id>")
 def admin_update_field_section(plan_id, section_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     section = db.get_field_section(section_id)
@@ -1941,24 +2070,28 @@ def admin_update_field_section(plan_id, section_id):
     if "points" in data:
         fields["points_json"] = json.dumps(data["points"], ensure_ascii=False)
     db.update_field_section(section_id, fields)
+    _audit("Anbau-Bereich aktualisiert", "anbau_section", f"{plan_id}/{section_id}", user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.delete("/api/admin/field-plans/<int:plan_id>/sections/<int:section_id>")
 def admin_delete_field_section(plan_id, section_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     section = db.get_field_section(section_id)
     if not section or section["plan_id"] != plan_id:
         return err("Bereich nicht gefunden.", 404)
     db.delete_field_section(section_id)
+    _audit("Anbau-Bereich gelöscht", "anbau_section", f"{plan_id}/{section_id}", user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/field-plans/<int:plan_id>/sections/<int:section_id>/water")
 def admin_water_field_section(plan_id, section_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     section = db.get_field_section(section_id)
@@ -1966,6 +2099,7 @@ def admin_water_field_section(plan_id, section_id):
         return err("Bereich nicht gefunden.", 404)
     today = time.strftime("%Y-%m-%d", time.localtime())
     db.update_field_section(section_id, {"watering_last": today})
+    _audit("Bewässerung protokolliert", "anbau_section", f"{plan_id}/{section_id}", f"Datum: {today}", user=admin_user)
     return jsonify({"ok": True, "watering_last": today})
 
 
@@ -1973,7 +2107,8 @@ def admin_water_field_section(plan_id, section_id):
 
 @app.get("/api/admin/plant-catalog")
 def admin_list_plant_catalog():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     entries = db.list_plant_catalog()
@@ -2022,7 +2157,8 @@ def public_current_planting():
 
 @app.post("/api/admin/plant-catalog")
 def admin_create_plant_catalog_entry():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -2030,12 +2166,14 @@ def admin_create_plant_catalog_entry():
     if not name:
         return err("Name ist erforderlich.", 400)
     entry_id = db.create_plant_catalog_entry(data)
+    _audit("Pflanze erstellt", "pflanze", name, user=admin_user)
     return jsonify({"ok": True, "id": entry_id})
 
 
 @app.get("/api/admin/plant-catalog/<int:entry_id>")
 def admin_get_plant_catalog_entry(entry_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     entry = db.get_plant_catalog_entry(entry_id)
@@ -2048,7 +2186,8 @@ def admin_get_plant_catalog_entry(entry_id):
 
 @app.put("/api/admin/plant-catalog/<int:entry_id>")
 def admin_update_plant_catalog_entry(entry_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     entry = db.get_plant_catalog_entry(entry_id)
@@ -2064,21 +2203,25 @@ def admin_update_plant_catalog_entry(entry_id):
             fields[key] = json.dumps(data[key], ensure_ascii=False)
     if fields:
         db.update_plant_catalog_entry(entry_id, fields)
+    _audit("Pflanze aktualisiert", "pflanze", str(entry_id), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.delete("/api/admin/plant-catalog/<int:entry_id>")
 def admin_delete_plant_catalog_entry(entry_id):
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     db.delete_plant_catalog_entry(entry_id)
+    _audit("Pflanze gelöscht", "pflanze", str(entry_id), user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.get("/api/admin/rotation-history")
 def admin_rotation_history():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify({"history": db.get_crop_rotation_history()})
@@ -2086,7 +2229,8 @@ def admin_rotation_history():
 
 @app.post("/api/admin/rotation-snapshot")
 def admin_save_rotation_snapshot():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -2097,12 +2241,14 @@ def admin_save_rotation_snapshot():
         from datetime import datetime
         plan_year = datetime.utcnow().year
     db.save_crop_rotation_snapshot(plan_name, sections, plan_year)
+    _audit("Fruchtfolge-Snapshot gespeichert", "fruchtfolge", plan_name, user=admin_user)
     return jsonify({"ok": True})
 
 
 @app.post("/api/admin/rotation-conflicts")
 def admin_rotation_conflicts():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
@@ -2114,7 +2260,8 @@ def admin_rotation_conflicts():
 
 @app.get("/api/admin/backup")
 def admin_backup():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     ts = time.strftime("%Y-%m-%d_%H%M%S", time.localtime())
@@ -2142,6 +2289,7 @@ def admin_backup():
             if os.path.isfile(path) and fname.lower().endswith(tuple(ALLOWED_IMAGE_EXT)):
                 zf.write(path, f"assets/img/{fname}")
     buf.seek(0)
+    _audit("Backup erstellt", "backup", ts, user=admin_user)
     return Response(
         buf.getvalue(),
         mimetype="application/zip",
@@ -2151,10 +2299,10 @@ def admin_backup():
 
 @app.post("/api/admin/backup/restore")
 def admin_restore_backup():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
-    admin_user = require_admin()
     file = request.files.get("file")
     if not file:
         return err("Keine Backup-Datei hochgeladen.", 400)
@@ -2211,6 +2359,7 @@ def admin_restore_backup():
     db.delete_user_sessions(admin_id)
     token = secrets.token_hex(32)
     db.create_session(token, admin_id)
+    _audit("Backup wiederhergestellt", "backup", user=admin_user)
     return jsonify(
         {
             "ok": True,
@@ -2280,7 +2429,8 @@ def _newsletter_scheduler():
 
 @app.get("/api/admin/newsletter/settings")
 def admin_newsletter_settings():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     return jsonify({
@@ -2291,12 +2441,14 @@ def admin_newsletter_settings():
 
 @app.post("/api/admin/newsletter/settings")
 def admin_newsletter_settings_save():
-    bad = _admin_ok(require_admin())
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
     if bad:
         return bad
     data = request.get_json(silent=True) or {}
     if "auto_enabled" in data:
         db.set_setting("newsletter_auto_enabled", "1" if data["auto_enabled"] else "0")
+    _audit("Newsletter-Einstellungen gespeichert", "newsletter", user=admin_user)
     return jsonify({"ok": True})
 
 
