@@ -410,7 +410,7 @@ function renderCart() {
           <td>
             <div class="input-group input-group-sm" style="max-width:120px;">
               <button class="btn btn-outline-secondary qty-minus" data-id="${pId}">-</button>
-              <span class="form-control text-center">${i.qty}</span>
+              <input type="number" class="form-control text-center qty-input" data-id="${pId}" value="${i.qty}" min="${p.sell_per_kg ? 0.1 : 1}" step="${p.sell_per_kg ? 0.1 : 1}">
               <button class="btn btn-outline-secondary qty-plus" data-id="${pId}">+</button>
             </div>
           </td>
@@ -428,6 +428,28 @@ function renderCart() {
   tableBody.querySelectorAll(".qty-minus").forEach((b) =>
     b.addEventListener("click", () => changeQty(b.dataset.id, -1))
   );
+  tableBody.querySelectorAll(".qty-input").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = input.dataset.id;
+      const p = getProduct(id);
+      let val = parseFloat(input.value);
+      if (isNaN(val) || val <= 0) {
+        removeFromCart(id);
+        return;
+      }
+      const min = p && p.sell_per_kg ? 0.1 : 1;
+      const step = p && p.sell_per_kg ? 0.1 : 1;
+      val = Math.max(min, parseFloat(val.toFixed(2)));
+      const cart = getCart();
+      const item = cart.find((i) => i.id === id);
+      if (item) {
+        item.qty = val;
+        saveCart(cart);
+        updateCartCount();
+        renderCart();
+      }
+    });
+  });
   tableBody.querySelectorAll(".cart-remove").forEach((b) =>
     b.addEventListener("click", () => removeFromCart(b.dataset.id))
   );
