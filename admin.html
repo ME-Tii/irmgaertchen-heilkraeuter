@@ -226,7 +226,10 @@
               </div>
               <div class="col-md-2">
                 <label for="apId" class="form-label">Artikel-ID *</label>
-                <input type="text" class="form-control" id="apId" placeholder="z. B. schafgarbe" required>
+                <div class="input-group">
+                  <input type="text" class="form-control" id="apId" placeholder="z. B. schafgarbe" required>
+                  <button class="btn btn-outline-secondary" type="button" id="apIdGenerate" title="Aus Name generieren"><i class="bi bi-magic"></i></button>
+                </div>
               </div>
               <div class="col-md-2">
                 <label for="apPrice" class="form-label">Preis (€) *</label>

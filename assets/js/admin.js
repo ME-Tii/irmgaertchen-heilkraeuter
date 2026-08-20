@@ -1205,6 +1205,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const addProductForm = document.getElementById("addProductForm");
+  const apIdGenerate = document.getElementById("apIdGenerate");
+  if (apIdGenerate) {
+    apIdGenerate.addEventListener("click", () => {
+      const name = document.getElementById("apName").value.trim();
+      if (!name) return;
+      const slug = name.toLowerCase().replace(/[äöüß]/g, (c) => ({ä:"ae",ö:"oe",ü:"ue",ß:"ss"}[c] || c)).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      document.getElementById("apId").value = slug;
+    });
+  }
   if (addProductForm) {
     addProductForm.addEventListener("submit", (e) => {
       e.preventDefault();
