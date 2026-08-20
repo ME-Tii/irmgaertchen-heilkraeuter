@@ -659,11 +659,26 @@ def init_db():
         conn.rollback()
     # ---- migrate ip_labels to new schema (ua_pattern + id) ----
     try:
-        cols = [r[1] for r in conn.execute(_sql("PRAGMA table_info(ip_labels)")).fetchall()] if not USE_PG else []
-        if cols and "id" not in cols:
+        needs_migrate = False
+        if USE_PG:
+            row = conn.execute(_sql(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'ip_labels' AND column_name = 'id'"
+            )).fetchone()
+            if not row:
+                needs_migrate = True
+        else:
+            cols = [r[1] for r in conn.execute(_sql("PRAGMA table_info(ip_labels)")).fetchall()]
+            if "id" not in cols:
+                needs_migrate = True
+        if needs_migrate:
+            try:
+                conn.execute(_sql("DROP TABLE IF EXISTS ip_labels_old"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
             conn.execute(_sql("ALTER TABLE ip_labels RENAME TO ip_labels_old"))
             conn.commit()
-        if not cols or "id" not in cols:
             if USE_PG:
                 conn.execute(_sql(
                     "CREATE TABLE ip_labels ("
@@ -678,14 +693,8 @@ def init_db():
                     "ua_pattern TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '', "
                     "UNIQUE(ip_address, ua_pattern))"
                 ))
-            try:
-                conn.execute(_sql("INSERT INTO ip_labels (ip_address, label) SELECT ip_address, '' FROM ip_labels_old"))
-            except Exception:
-                pass
-            try:
-                conn.execute(_sql("DROP TABLE IF EXISTS ip_labels_old"))
-            except Exception:
-                pass
+            conn.execute(_sql("INSERT INTO ip_labels (ip_address, label) SELECT ip_address, label FROM ip_labels_old"))
+            conn.execute(_sql("DROP TABLE IF EXISTS ip_labels_old"))
             conn.commit()
     except Exception:
         conn.rollback()
