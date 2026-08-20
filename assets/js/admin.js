@@ -581,7 +581,7 @@ function renderMessages() {
 
 function loadInventory() {
   return adminApi("api/admin/products").then((data) => {
-    window.ADMIN_PRODUCTS = data.products || [];
+    window.ADMIN_PRODUCTS = (data.products || []).filter((p) => p.visible);
   }).catch((err) => {
     showMsg("inventoryMsg", err.message || "Lagerbestand konnte nicht geladen werden.", "danger");
   });
