@@ -1208,10 +1208,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const apIdGenerate = document.getElementById("apIdGenerate");
   if (apIdGenerate) {
     apIdGenerate.addEventListener("click", () => {
-      const name = document.getElementById("apName").value.trim();
-      if (!name) return;
-      const slug = name.toLowerCase().replace(/[äöüß]/g, (c) => ({ä:"ae",ö:"oe",ü:"ue",ß:"ss"}[c] || c)).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      document.getElementById("apId").value = slug;
+      const existing = (window.ADMIN_PRODUCTS || []).map((p) => parseInt(p.id, 10)).filter((n) => !isNaN(n));
+      const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
+      document.getElementById("apId").value = String(next);
     });
   }
   if (addProductForm) {
