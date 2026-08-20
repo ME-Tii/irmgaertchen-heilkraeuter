@@ -390,12 +390,15 @@
         var left = Math.max(0, (s.getTime() - minDate.getTime()) / range * 100);
         var width = Math.max(2, (e.getTime() - s.getTime()) / range * 100);
         if (left + width > 100) width = 100 - left;
+        var labelOutside = width < 12;
         var tip = it.name;
         if (it.start) tip += '\nPflanzung: ' + it.start;
         if (it.end) tip += '\nErnte: ' + it.end;
         barsHtml += '<div class="position-relative mb-1" style="height:24px;">' +
           '<div class="fp-bar-wrap" style="position:absolute;left:' + left + '%;width:' + width + '%;top:2px;height:20px;background:' + it.color + ';opacity:0.85;border-radius:4px;cursor:default;" data-tip="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '<br>') + '">' +
-          '<span class="position-absolute small text-truncate" style="left:0;right:0;top:3px;line-height:18px;color:#fff;padding-left:4px;font-weight:500;">' + it.name + '</span>' +
+          (labelOutside
+            ? '<span class="position-absolute small" style="left:calc(100% + 4px);top:3px;line-height:18px;color:#000;white-space:nowrap;font-weight:500;">' + it.name + '</span>'
+            : '<span class="position-absolute small text-truncate" style="left:0;right:0;top:3px;line-height:18px;color:#fff;padding-left:4px;font-weight:500;">' + it.name + '</span>') +
           '<div class="fp-bar-tip" style="display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;white-space:nowrap;z-index:10;pointer-events:none;">' + tip + '</div>' +
           '</div>' +
           '</div>';
