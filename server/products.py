@@ -18,7 +18,7 @@ CATALOG = {
     "lavendel": {"name": "Lavendel (Bio-Pflanze)", "category": "Heilkräuterpflanzen", "price_cents": 350, "desc": "Duftender Lavendel für Entspannung und Kübel.", "image": "lavendel.jpg"},
     "minze": {"name": "Pfefferminze (Bio-Pflanze)", "category": "Heilkräuterpflanzen", "price_cents": 320, "desc": "Frische Pfefferminze, ideal für Tee und Erfrischung.", "image": "minze.jpg"},
     "basilikum": {"name": "Basilikum (Bio-Topf)", "category": "Heilkräuterpflanzen", "price_cents": 320, "desc": "Aromatisches Basilikum, frisch für die Küche.", "image": "basilikum.jpg"},
-    "salbeitee": {"name": "Salbei-Kräutertee", "category": "Heilkräuter-Tees", "price_cents": 650, "desc": "Beruhigender Salbeitee aus eigenem Anbau, lose im Beutel.", "image": "kraeutertee.jpg"},
+    "salbeitee": {"name": "Salbei-Kräutertee", "category": "Heilkräuter-Tees", "price_cents": 650, "desc": "Beruhigender Salbeitee aus eigenem Anbau, lose im Beutel.", "image": "salbei.jpg"},
     "kamillentee": {"name": "Kamillenblüten-Tee", "category": "Heilkräuter-Tees", "price_cents": 650, "desc": "Sanfter Kamillentee aus frisch geernteten Blüten.", "image": "kamille.jpg"},
     "minztee": {"name": "Pfefferminz-Tee", "category": "Heilkräuter-Tees", "price_cents": 600, "desc": "Erfrischend-klarer Pfefferminztee, handverlesen.", "image": "minze.jpg"},
     "melissentee": {"name": "Melissen-Tee", "category": "Heilkräuter-Tees", "price_cents": 600, "desc": "Wohltuender Melissentee für ruhige Abende.", "image": "melisse.jpg"},

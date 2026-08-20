@@ -269,7 +269,7 @@ function imgFor(id, p) {
     lavendel: "lavendel.jpg",
     minze: "minze.jpg",
     basilikum: "basilikum.jpg",
-    salbeitee: "kraeutertee.jpg",
+    salbeitee: "salbei.jpg",
     kamillentee: "kamille.jpg",
     minztee: "minze.jpg",
     melissentee: "melisse.jpg",
