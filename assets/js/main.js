@@ -93,9 +93,10 @@ function stockInfo(id) {
   const p = getProduct(id);
   if (!p || typeof p.stock !== "number") return null;
   const s = Math.max(0, p.stock);
+  const unit = p.sell_per_kg ? " kg" : "";
   if (s <= 0) return { out: true, low: false, text: "Ausverkauft" };
-  if (s <= 5) return { out: false, low: true, text: "Nur noch " + s + " verfügbar" };
-  return { out: false, low: false, text: "Verfügbar" };
+  if (p.sell_per_kg ? s <= 0.5 : s <= 5) return { out: false, low: true, text: "Nur noch " + s + unit + " verfügbar" };
+  return { out: false, low: false, text: "Verfügbar" + unit };
 }
 
 function getCart() {
@@ -116,12 +117,14 @@ function addToCart(id) {
     showToast("Dieser Artikel ist leider ausverkauft.");
     return;
   }
+  const p = getProduct(id);
+  const step = p && p.sell_per_kg ? 0.1 : 1;
   const cart = getCart();
   const item = cart.find((i) => i.id === id);
   if (item) {
-    item.qty += 1;
+    item.qty = parseFloat((item.qty + step).toFixed(2));
   } else {
-    cart.push({ id, qty: 1 });
+    cart.push({ id, qty: step });
   }
   saveCart(cart);
   updateCartCount();
@@ -138,7 +141,9 @@ function changeQty(id, delta) {
   const cart = getCart();
   const item = cart.find((i) => i.id === id);
   if (!item) return;
-  item.qty += delta;
+  const p = getProduct(id);
+  const step = p && p.sell_per_kg ? 0.1 : 1;
+  item.qty = parseFloat((item.qty + delta * step).toFixed(2));
   if (item.qty <= 0) {
     saveCart(cart.filter((i) => i.id !== id));
   } else {
@@ -356,7 +361,7 @@ function renderShop(category) {
             <p class="card-text text-muted small flex-grow-1">${pDesc}</p>
             ${stockBadge}
             <div class="d-flex justify-content-between align-items-center mt-2">
-              <span class="price">${p.price.toFixed(2).replace(".", ",")} €</span>
+              <span class="price">${p.price.toFixed(2).replace(".", ",")}${p.sell_per_kg ? ' <small class="text-muted">€/kg</small>' : " €"}</span>
               <button class="btn btn-irm btn-sm add-to-cart" data-id="${pId}"${disabled}>In den Warenkorb</button>
             </div>
             <a class="btn btn-outline-irm btn-sm w-100 mt-2" href="produkt/${pId}">Details ansehen</a>
@@ -396,11 +401,12 @@ function renderCart() {
       const lineTotal = p.price * i.qty;
       const pName = esc(p.name || "");
       const pId = esc(i.id || "");
+      const unitLabel = p.sell_per_kg ? "/kg" : "";
       return `
         <tr>
           <td><img src="${imgFor(i.id, p)}" alt="${pName}" style="width:60px;height:45px;object-fit:cover;" class="rounded"></td>
           <td>${pName}</td>
-          <td>${p.price.toFixed(2).replace(".", ",")} €</td>
+          <td>${p.price.toFixed(2).replace(".", ",")}${unitLabel ? " €" + unitLabel : " €"}</td>
           <td>
             <div class="input-group input-group-sm" style="max-width:120px;">
               <button class="btn btn-outline-secondary qty-minus" data-id="${pId}">-</button>

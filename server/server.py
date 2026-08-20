@@ -405,6 +405,7 @@ def product_page(slug):
         product=product,
         image=image,
         price="{:,.2f}".format(product["price_cents"] / 100).replace(",", "X").replace(".", ",").replace("X", "."),
+        sell_per_kg=bool(product.get("sell_per_kg")),
     )
 
 
@@ -743,6 +744,7 @@ def products():
                 "image": p["image"] or "",
                 "stock": p["stock"],
                 "custom": bool(p["custom"]),
+                "sell_per_kg": bool(p.get("sell_per_kg")),
             }
         )
     return jsonify({"products": out})
@@ -1565,6 +1567,7 @@ def admin_products():
                 "stock": p["stock"],
                 "custom": bool(p["custom"]),
                 "visible": bool(p["visible"]),
+                "sell_per_kg": bool(p.get("sell_per_kg")),
             }
         )
     return jsonify({"products": out})
@@ -1588,9 +1591,10 @@ def admin_add_product():
     if db.get_product(slug):
         return err("Diese Artikel-ID existiert bereits.", 400)
     stock = data.get("stock")
+    sell_per_kg = 1 if data.get("sell_per_kg") else 0
     if stock is not None and stock != "":
         try:
-            stock = max(0, int(stock))
+            stock = max(0, float(stock))
         except (TypeError, ValueError):
             return err("Ungültiger Lagerbestand.", 400)
     category = _clean_text(data.get("category"), 100) or "Sonstiges"
@@ -1598,7 +1602,7 @@ def admin_add_product():
     image = _clean_text(data.get("image"), 200)
     if image and not SAFE_FILENAME_RE.match(image):
         return err("Ungültiger Bilddateiname.", 400)
-    db.add_product(slug, name, category, price_cents, stock, desc, image)
+    db.add_product(slug, name, category, price_cents, stock, desc, image, sell_per_kg)
     return jsonify({"ok": True})
 
 
@@ -1623,16 +1627,19 @@ def admin_update_product(slug):
             stock = None
         else:
             try:
-                stock = max(0, int(stock))
+                stock = max(0, float(stock))
             except (TypeError, ValueError):
                 return err("Ungültiger Lagerbestand.", 400)
     else:
         stock = product["stock"]
+    sell_per_kg = None
+    if "sell_per_kg" in data:
+        sell_per_kg = 1 if data["sell_per_kg"] else 0
     desc = _clean_text(data.get("desc", product.get("desc") or ""), 2000)
     image = _clean_text(data.get("image", product.get("image") or ""), 200)
     if image and not SAFE_FILENAME_RE.match(image):
         return err("Ungültiger Bilddateiname.", 400)
-    db.update_product(slug, name, category, price_cents, stock, desc, image)
+    db.update_product(slug, name, category, price_cents, stock, desc, image, sell_per_kg)
     return jsonify({"ok": True})
 
 

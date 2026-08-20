@@ -241,6 +241,12 @@
                 <label for="apStock" class="form-label">Startbestand</label>
                 <input type="number" min="0" class="form-control" id="apStock" placeholder="leer = unbegrenzt">
               </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="apSellPerKg">
+                  <label class="form-check-label" for="apSellPerKg">Pro kg</label>
+                </div>
+              </div>
               <div class="col-12">
                 <label for="apDesc" class="form-label">Beschreibung</label>
                 <input type="text" class="form-control" id="apDesc" placeholder="Kurze Produktbeschreibung">
@@ -668,7 +674,13 @@
               </div>
               <div class="col-6">
                 <label for="pdStock" class="form-label">Bestand</label>
-                <input type="number" min="0" class="form-control" id="pdStock" placeholder="leer = unbegrenzt">
+                <input type="number" min="0" step="1" class="form-control" id="pdStock" placeholder="leer = unbegrenzt">
+              </div>
+            </div>
+            <div class="mb-3 mt-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="pdSellPerKg">
+                <label class="form-check-label" for="pdSellPerKg">Pro kg verkaufen</label>
               </div>
             </div>
             <div class="mb-3 mt-3">

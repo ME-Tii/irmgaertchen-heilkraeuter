@@ -596,6 +596,11 @@ def init_db():
         conn.commit()
     except Exception:
         conn.rollback()
+    try:
+        conn.execute(_sql("ALTER TABLE products ADD COLUMN sell_per_kg INTEGER NOT NULL DEFAULT 0"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
     seed_products(conn)
     conn.commit()
     seed_plant_catalog(conn)
@@ -851,23 +856,29 @@ def get_product(slug):
     return row_to_dict(row)
 
 
-def add_product(slug, name, category, price_cents, stock=None, desc="", image=""):
+def add_product(slug, name, category, price_cents, stock=None, desc="", image="", sell_per_kg=0):
     conn = get_conn()
     conn.execute(
-        _sql("INSERT INTO products (slug, name, category, price_cents, \"desc\", image, stock, custom, visible) "
-             "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 1)"),
-        (slug, name, category, price_cents, desc, image, stock),
+        _sql("INSERT INTO products (slug, name, category, price_cents, \"desc\", image, stock, custom, visible, sell_per_kg) "
+             "VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 1, %s)"),
+        (slug, name, category, price_cents, desc, image, stock, sell_per_kg),
     )
     conn.commit()
     conn.close()
 
 
-def update_product(slug, name, category, price_cents, stock, desc="", image=""):
+def update_product(slug, name, category, price_cents, stock, desc="", image="", sell_per_kg=None):
     conn = get_conn()
-    conn.execute(
-        _sql("UPDATE products SET name = %s, category = %s, price_cents = %s, stock = %s, \"desc\" = %s, image = %s WHERE slug = %s"),
-        (name, category, price_cents, stock, desc, image, slug),
-    )
+    if sell_per_kg is not None:
+        conn.execute(
+            _sql("UPDATE products SET name = %s, category = %s, price_cents = %s, stock = %s, \"desc\" = %s, image = %s, sell_per_kg = %s WHERE slug = %s"),
+            (name, category, price_cents, stock, desc, image, sell_per_kg, slug),
+        )
+    else:
+        conn.execute(
+            _sql("UPDATE products SET name = %s, category = %s, price_cents = %s, stock = %s, \"desc\" = %s, image = %s WHERE slug = %s"),
+            (name, category, price_cents, stock, desc, image, slug),
+        )
     conn.commit()
     conn.close()
 
@@ -890,7 +901,7 @@ def decrement_stock(items):
     conn = get_conn()
     for item in items:
         slug = item.get("id")
-        qty = int(item.get("qty", 0))
+        qty = float(item.get("qty", 0))
         if not slug or qty <= 0:
             continue
         conn.execute(
@@ -905,7 +916,7 @@ def restore_stock(items):
     conn = get_conn()
     for item in items:
         slug = item.get("id")
-        qty = int(item.get("qty", 0))
+        qty = float(item.get("qty", 0))
         if not slug or qty <= 0:
             continue
         conn.execute(

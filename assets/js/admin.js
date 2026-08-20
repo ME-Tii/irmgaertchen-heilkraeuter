@@ -602,28 +602,34 @@ function renderInventory() {
   body.innerHTML = products
     .map((p) => {
       const cur = p.stock;
+      const isKg = p.sell_per_kg;
+      const unit = isKg ? " kg" : "";
       const badge =
         cur === null
           ? '<span class="badge bg-secondary">Unbegrenzt</span>'
           : cur <= 0
-          ? '<span class="badge bg-danger">' + cur + "</span>"
-          : cur <= 5
-          ? '<span class="badge bg-warning text-dark">' + cur + "</span>"
-          : '<span class="badge bg-success">' + cur + "</span>";
+          ? '<span class="badge bg-danger">' + cur + unit + "</span>"
+          : (isKg ? cur <= 0.5 : cur <= 5)
+          ? '<span class="badge bg-warning text-dark">' + cur + unit + "</span>"
+          : '<span class="badge bg-success">' + cur + unit + "</span>";
       const imgSrc = p.image ? "assets/img/" + p.image : "assets/img/kraeutergarten.jpg";
       const safePrice = Number(p.price);
       const priceVal = (isNaN(safePrice) ? 0 : safePrice).toFixed(2);
+      const stockStep = isKg ? "0.1" : "1";
+      const stockDecimals = isKg ? " kg" : "";
       return (
         "<tr>" +
         "<td>" + esc(p.name) + (p.custom ? ' <span class="badge bg-info text-dark">eigen</span>' : "") + "</td>" +
         "<td><small class=\"text-muted\">" + esc(p.category) + "</small></td>" +
         "<td>" + badge + "</td>" +
-        '<td style="max-width:130px;"><input type="number" min="0" step="1" class="form-control form-control-sm stock-input" data-id="' + esc(p.id) + '" placeholder="Anzahl" value="' + (cur === null ? "" : cur) + '"></td>' +
-        '<td style="max-width:110px;"><input type="number" min="0" step="0.1" class="form-control form-control-sm price-input" data-id="' + esc(p.id) + '" value="' + priceVal + '"></td>' +
+        '<td style="max-width:130px;"><input type="number" min="0" step="' + stockStep + '" class="form-control form-control-sm stock-input" data-id="' + esc(p.id) + '" placeholder="' + (isKg ? "kg" : "Anzahl") + '" value="' + (cur === null ? "" : cur) + '"></td>' +
+        '<td style="max-width:110px;"><input type="number" min="0" step="0.01" class="form-control form-control-sm price-input" data-id="' + esc(p.id) + '" value="' + priceVal + '"></td>' +
         '<td class="text-nowrap"><img src="' + imgSrc + '" alt="Bild" style="width:44px;height:44px;object-fit:cover;" class="rounded me-2">' +
         '<input type="file" accept="image/*" class="d-none img-file" data-id="' + esc(p.id) + '">' +
         '<button class="btn btn-sm btn-outline-secondary img-upload" data-id="' + esc(p.id) + '" title="Bild hochladen"><i class="bi bi-image"></i></button></td>' +
         '<td class="text-end text-nowrap">' +
+        '<div class="form-check form-switch d-inline-block me-2" title="Pro kg verkaufen">' +
+        '<input class="form-check-input kg-toggle" type="checkbox" data-id="' + esc(p.id) + '"' + (isKg ? " checked" : "") + '></div>' +
         '<button class="btn btn-sm btn-outline-irm product-details" data-id="' + esc(p.id) + '" title="Details bearbeiten (Name, Kategorie, Preis, Bestand, Beschreibung)"><i class="bi bi-pencil-square"></i> Details</button> ' +
         '<button class="btn btn-sm btn-irm stock-save" data-id="' + esc(p.id) + '"><i class="bi bi-check-lg"></i> Speichern</button> ' +
         '<button class="btn btn-sm btn-outline-secondary stock-unlimited" data-id="' + esc(p.id) + '" title="Als unbegrenzt markieren"><i class="bi bi-infinity"></i></button> ' +
@@ -638,9 +644,10 @@ function renderInventory() {
     btn.addEventListener("click", () => {
       const stockInput = body.querySelector('.stock-input[data-id="' + btn.dataset.id + '"]');
       const priceInput = body.querySelector('.price-input[data-id="' + btn.dataset.id + '"]');
+      const kgToggle = body.querySelector('.kg-toggle[data-id="' + btn.dataset.id + '"]');
       const value = stockInput ? stockInput.value : "";
-      const stock = value === "" ? null : Math.max(0, Math.floor(Number(value)) || 0);
-      const payload = { stock };
+      const stock = value === "" ? null : Math.max(0, parseFloat(Number(value).toFixed(1)) || 0);
+      const payload = { stock, sell_per_kg: kgToggle ? kgToggle.checked : undefined };
       if (priceInput && priceInput.value !== "") {
         payload.price = Math.max(0, Number(priceInput.value) || 0);
       }
@@ -651,6 +658,15 @@ function renderInventory() {
         })
         .then(renderInventory)
         .catch((err) => showToast(err.message));
+    });
+  });
+  body.querySelectorAll(".kg-toggle").forEach((toggle) => {
+    toggle.addEventListener("change", () => {
+      const stockInput = body.querySelector('.stock-input[data-id="' + toggle.dataset.id + '"]');
+      if (stockInput) {
+        stockInput.step = toggle.checked ? "0.1" : "1";
+        stockInput.placeholder = toggle.checked ? "kg" : "Anzahl";
+      }
     });
   });
   body.querySelectorAll(".stock-unlimited").forEach((btn) => {
@@ -705,6 +721,7 @@ function renderInventory() {
       document.getElementById("pdId").value = product.id || "";
       document.getElementById("pdPrice").value = product.price != null ? product.price.toFixed(2) : "";
       document.getElementById("pdStock").value = product.stock === null ? "" : product.stock;
+      document.getElementById("pdSellPerKg").checked = !!product.sell_per_kg;
       document.getElementById("pdCategory").value = product.category || "";
       document.getElementById("pdDesc").value = product.desc || "";
       bootstrap.Modal.getOrCreateInstance(document.getElementById("productDetailsModal")).show();
@@ -1151,13 +1168,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const priceVal = document.getElementById("pdPrice").value;
       const stockVal = document.getElementById("pdStock").value;
+      const sellPerKg = document.getElementById("pdSellPerKg").checked;
       const payload = {
         name,
         category: document.getElementById("pdCategory").value.trim(),
         desc: document.getElementById("pdDesc").value.trim(),
+        sell_per_kg: sellPerKg,
       };
       if (priceVal !== "") payload.price = Math.max(0, Number(priceVal) || 0);
-      payload.stock = stockVal === "" ? null : Math.max(0, Math.floor(Number(stockVal)) || 0);
+      payload.stock = stockVal === "" ? null : Math.max(0, parseFloat(Number(stockVal).toFixed(1)) || 0);
       adminApi("api/admin/products/" + encodeURIComponent(id), "PATCH", payload)
         .then(() => {
           showToast("Artikeldetails gespeichert.");
@@ -1197,6 +1216,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       const stock = document.getElementById("apStock").value;
+      const sellPerKg = document.getElementById("apSellPerKg").checked;
       const imageInput = document.getElementById("apImage");
       adminApi("api/admin/products", "POST", {
         id: id,
@@ -1205,6 +1225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         category: document.getElementById("apCategory").value,
         stock: stock === "" ? null : Number(stock),
         desc: document.getElementById("apDesc").value.trim(),
+        sell_per_kg: sellPerKg,
       })
         .then((data) => {
           const file = imageInput && imageInput.files && imageInput.files[0];

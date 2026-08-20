@@ -119,7 +119,7 @@
         <span class="text-irm small text-uppercase fw-semibold">{{ product.category }}</span>
         <h1 class="mt-1 mb-3">{{ product.name }}</h1>
         <p class="lead text-muted">{{ product.desc }}</p>
-        <p class="price mb-3">{{ price }} €</p>
+        <p class="price mb-3">{{ price }} €{% if sell_per_kg %}<small class="text-muted">/kg</small>{% endif %}</p>
         <div class="mb-3">
           <span class="badge bg-success"><i class="bi bi-check-circle"></i> Zertifiziertes Naturland-Mitglied (DE-ÖKO-005)</span>
           <span class="badge bg-light text-dark border"><i class="bi bi-truck"></i> Versand 5,90 € – ab 40 € kostenlos</span>
