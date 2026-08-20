@@ -223,8 +223,11 @@ SQLITE_SCHEMA = [
         value TEXT NOT NULL DEFAULT ''
     );""",
     """CREATE TABLE IF NOT EXISTS ip_labels (
-        ip_address TEXT PRIMARY KEY,
-        label TEXT NOT NULL DEFAULT ''
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip_address TEXT NOT NULL,
+        ua_pattern TEXT NOT NULL DEFAULT '',
+        label TEXT NOT NULL DEFAULT '',
+        UNIQUE(ip_address, ua_pattern)
     );""",
     """CREATE TABLE IF NOT EXISTS ip_blacklist (
         ip_address TEXT PRIMARY KEY,
@@ -427,8 +430,11 @@ PG_SCHEMA = [
         value TEXT NOT NULL DEFAULT ''
     );""",
     """CREATE TABLE IF NOT EXISTS ip_labels (
-        ip_address TEXT PRIMARY KEY,
-        label TEXT NOT NULL DEFAULT ''
+        id SERIAL PRIMARY KEY,
+        ip_address TEXT NOT NULL,
+        ua_pattern TEXT NOT NULL DEFAULT '',
+        label TEXT NOT NULL DEFAULT '',
+        UNIQUE(ip_address, ua_pattern)
     );""",
     """CREATE TABLE IF NOT EXISTS ip_blacklist (
         ip_address TEXT PRIMARY KEY,
@@ -649,6 +655,38 @@ def init_db():
     try:
         conn.execute(_sql("ALTER TABLE products ADD COLUMN sell_per_kg INTEGER NOT NULL DEFAULT 0"))
         conn.commit()
+    except Exception:
+        conn.rollback()
+    # ---- migrate ip_labels to new schema (ua_pattern + id) ----
+    try:
+        cols = [r[1] for r in conn.execute(_sql("PRAGMA table_info(ip_labels)")).fetchall()] if not USE_PG else []
+        if cols and "id" not in cols:
+            conn.execute(_sql("ALTER TABLE ip_labels RENAME TO ip_labels_old"))
+            conn.commit()
+        if not cols or "id" not in cols:
+            if USE_PG:
+                conn.execute(_sql(
+                    "CREATE TABLE ip_labels ("
+                    "id SERIAL PRIMARY KEY, ip_address TEXT NOT NULL, "
+                    "ua_pattern TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '', "
+                    "UNIQUE(ip_address, ua_pattern))"
+                ))
+            else:
+                conn.execute(_sql(
+                    "CREATE TABLE ip_labels ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, ip_address TEXT NOT NULL, "
+                    "ua_pattern TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '', "
+                    "UNIQUE(ip_address, ua_pattern))"
+                ))
+            try:
+                conn.execute(_sql("INSERT INTO ip_labels (ip_address, label) SELECT ip_address, '' FROM ip_labels_old"))
+            except Exception:
+                pass
+            try:
+                conn.execute(_sql("DROP TABLE IF EXISTS ip_labels_old"))
+            except Exception:
+                pass
+            conn.commit()
     except Exception:
         conn.rollback()
     seed_products(conn)
@@ -1972,25 +2010,25 @@ def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
 
 def get_ip_labels():
     conn = get_conn()
-    rows = conn.execute(_sql("SELECT ip_address, label FROM ip_labels ORDER BY ip_address")).fetchall()
+    rows = conn.execute(_sql("SELECT id, ip_address, ua_pattern, label FROM ip_labels ORDER BY ip_address, ua_pattern")).fetchall()
     conn.close()
     return all_rows(rows)
 
 
-def upsert_ip_label(ip_address, label):
+def upsert_ip_label(ip_address, label, ua_pattern=""):
     conn = get_conn()
     conn.execute(
-        _sql("INSERT INTO ip_labels (ip_address, label) VALUES (%s, %s) "
-             "ON CONFLICT (ip_address) DO UPDATE SET label = excluded.label"),
-        (ip_address, label),
+        _sql("INSERT INTO ip_labels (ip_address, ua_pattern, label) VALUES (%s, %s, %s) "
+             "ON CONFLICT (ip_address, ua_pattern) DO UPDATE SET label = excluded.label"),
+        (ip_address, ua_pattern, label),
     )
     conn.commit()
     conn.close()
 
 
-def delete_ip_label(ip_address):
+def delete_ip_label(label_id):
     conn = get_conn()
-    conn.execute(_sql("DELETE FROM ip_labels WHERE ip_address = %s"), (ip_address,))
+    conn.execute(_sql("DELETE FROM ip_labels WHERE id = %s"), (label_id,))
     conn.commit()
     conn.close()
 

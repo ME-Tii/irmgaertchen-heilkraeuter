@@ -3309,16 +3309,12 @@ function showCustomerDetail(userId) {
 
 var AUDIT_LOG_PAGE = 0;
 var AUDIT_LOG_PAGE_SIZE = 50;
-var IP_LABELS = {};
+var IP_LABELS = [];
 
 function loadIpLabels() {
   adminApi("api/admin/ip-labels")
     .then(function(data) {
-      IP_LABELS = {};
-      var labels = data.labels || [];
-      for (var i = 0; i < labels.length; i++) {
-        IP_LABELS[labels[i].ip_address] = labels[i].label;
-      }
+      IP_LABELS = data.labels || [];
       renderIpLabelsTable();
     })
     .catch(function() {});
@@ -3327,17 +3323,18 @@ function loadIpLabels() {
 function renderIpLabelsTable() {
   var body = document.getElementById("ipLabelsBody");
   if (!body) return;
-  var ips = Object.keys(IP_LABELS).sort();
-  if (!ips.length) {
-    body.innerHTML = '<tr><td colspan="3" class="text-muted text-center py-2 small">Noch keine Zuordnungen</td></tr>';
+  if (!IP_LABELS.length) {
+    body.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-2 small">Noch keine Zuordnungen</td></tr>';
     return;
   }
   var html = "";
-  for (var i = 0; i < ips.length; i++) {
+  for (var i = 0; i < IP_LABELS.length; i++) {
+    var l = IP_LABELS[i];
     html += "<tr>" +
-      "<td><code>" + esc(ips[i]) + "</code></td>" +
-      "<td>" + esc(IP_LABELS[ips[i]]) + "</td>" +
-      "<td><button class='btn btn-outline-danger btn-sm py-0' onclick='deleteIpLabel(\"" + esc(ips[i]) + "\")'><i class='bi bi-trash'></i></button></td>" +
+      "<td><code>" + esc(l.ip_address) + "</code></td>" +
+      "<td class='small'>" + (l.ua_pattern ? esc(l.ua_pattern) : '<span class="text-muted">alle</span>') + "</td>" +
+      "<td>" + esc(l.label) + "</td>" +
+      "<td><button class='btn btn-outline-danger btn-sm py-0' onclick='deleteIpLabel(" + l.id + ")'><i class='bi bi-trash'></i></button></td>" +
       "</tr>";
   }
   body.innerHTML = html;
@@ -3345,14 +3342,16 @@ function renderIpLabelsTable() {
 
 function saveIpLabel() {
   var ip = (document.getElementById("ipLabelIp").value || "").trim();
+  var ua = (document.getElementById("ipLabelUa").value || "").trim();
   var name = (document.getElementById("ipLabelName").value || "").trim();
   if (!ip) {
     showMsg("ipLabelsMsg", "IP-Adresse eingeben.", "warning");
     return;
   }
-  adminApi("api/admin/ip-labels", "PUT", { ip_address: ip, label: name })
+  adminApi("api/admin/ip-labels", "PUT", { ip_address: ip, label: name, ua_pattern: ua })
     .then(function() {
       document.getElementById("ipLabelIp").value = "";
+      document.getElementById("ipLabelUa").value = "";
       document.getElementById("ipLabelName").value = "";
       showMsg("ipLabelsMsg", "Gespeichert.", "success");
       loadIpLabels();
@@ -3362,9 +3361,9 @@ function saveIpLabel() {
     });
 }
 
-function deleteIpLabel(ip) {
-  if (!confirm("Zuordnung für " + ip + " löschen?")) return;
-  adminApi("api/admin/ip-labels/" + encodeURIComponent(ip), "DELETE")
+function deleteIpLabel(id) {
+  if (!confirm("Zuordnung löschen?")) return;
+  adminApi("api/admin/ip-labels/" + id, "DELETE")
     .then(function() {
       showMsg("ipLabelsMsg", "Gelöscht.", "success");
       loadIpLabels();
@@ -3372,6 +3371,21 @@ function deleteIpLabel(ip) {
     .catch(function(err) {
       showMsg("ipLabelsMsg", "Fehler: " + (err.message || err), "danger");
     });
+}
+
+function _matchLabel(ip, ua) {
+  if (!ip) return null;
+  var best = null;
+  for (var i = 0; i < IP_LABELS.length; i++) {
+    var l = IP_LABELS[i];
+    if (l.ip_address !== ip) continue;
+    if (!l.ua_pattern) {
+      if (!best) best = l;
+    } else if (ua && ua.toLowerCase().indexOf(l.ua_pattern.toLowerCase()) !== -1) {
+      return l;
+    }
+  }
+  return best;
 }
 
 function loadBlacklist() {
@@ -3448,10 +3462,10 @@ function _ipDisplay(ip) {
   return '<code>' + esc(ip) + '</code>';
 }
 
-function _nameForIp(ip) {
+function _nameForIp(ip, ua) {
   if (!ip) return '<span class="text-muted">–</span>';
-  var label = IP_LABELS[ip];
-  return label ? esc(label) : '<span class="text-muted">–</span>';
+  var l = _matchLabel(ip, ua || "");
+  return l ? esc(l.label) : '<span class="text-muted">–</span>';
 }
 
 function _fetchAuditLog() {
@@ -3492,7 +3506,7 @@ function _fetchAuditLog() {
             "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" : '<span class="text-muted">–</span>') + "</td>" +
             "<td><span class='badge " + actionClass + "'>" + actionLabel + "</span></td>" +
             "<td>" + _ipDisplay(e.ip_address) + "</td>" +
-            "<td>" + _nameForIp(e.ip_address) + "</td>" +
+            "<td>" + _nameForIp(e.ip_address, e.user_agent) + "</td>" +
             "<td class='small text-muted'>" + esc(e.details || "") + "</td>" +
             "</tr>";
         }

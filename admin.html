@@ -657,13 +657,17 @@
           </div>
           <div class="collapse" id="ipLabelsCollapse">
             <div class="card-body py-2">
+              <p class="text-muted small mb-2">Zum Unterscheiden von Geräten mit derselben IP (z.B. Handy vs. Laptop): Geräte-Teil im User-Agent angeben.</p>
               <div id="ipLabelsMsg" class="alert d-none py-1 mb-2" role="alert"></div>
               <div class="row g-2 align-items-end mb-2">
                 <div class="col-auto">
-                  <input type="text" class="form-control form-control-sm" id="ipLabelIp" placeholder="IP-Adresse" style="min-width:140px;">
+                  <input type="text" class="form-control form-control-sm" id="ipLabelIp" placeholder="IP-Adresse" style="min-width:130px;">
                 </div>
                 <div class="col-auto">
-                  <input type="text" class="form-control form-control-sm" id="ipLabelName" placeholder="Name / Beschriftung" style="min-width:180px;">
+                  <input type="text" class="form-control form-control-sm" id="ipLabelUa" placeholder="Gerät (optional, z.B. iPhone, Windows)" style="min-width:170px;">
+                </div>
+                <div class="col-auto">
+                  <input type="text" class="form-control form-control-sm" id="ipLabelName" placeholder="Name / Beschriftung" style="min-width:150px;">
                 </div>
                 <div class="col-auto">
                   <button class="btn btn-irm btn-sm" type="button" onclick="saveIpLabel()"><i class="bi bi-check-lg"></i> Speichern</button>
@@ -672,10 +676,10 @@
               <div class="table-responsive" style="max-height:200px; overflow-y:auto;">
                 <table class="table table-sm table-hover align-middle mb-0">
                   <thead class="table-light">
-                    <tr><th>IP-Adresse</th><th>Name</th><th style="width:60px;"></th></tr>
+                    <tr><th>IP-Adresse</th><th>Gerät</th><th>Name</th><th style="width:60px;"></th></tr>
                   </thead>
                   <tbody id="ipLabelsBody">
-                    <tr><td colspan="3" class="text-muted text-center py-2 small">Lade...</td></tr>
+                    <tr><td colspan="4" class="text-muted text-center py-2 small">Lade...</td></tr>
                   </tbody>
                 </table>
               </div>

@@ -1904,19 +1904,20 @@ def admin_upsert_ip_label():
     data = request.get_json(force=True, silent=True) or {}
     ip_address = (data.get("ip_address") or "").strip()
     label = (data.get("label") or "").strip()
+    ua_pattern = (data.get("ua_pattern") or "").strip()
     if not ip_address:
         return jsonify({"error": "ip_address required"}), 400
-    db.upsert_ip_label(ip_address, label)
+    db.upsert_ip_label(ip_address, label, ua_pattern)
     return jsonify({"ok": True})
 
 
-@app.delete("/api/admin/ip-labels/<ip>")
-def admin_delete_ip_label(ip):
+@app.delete("/api/admin/ip-labels/<int:label_id>")
+def admin_delete_ip_label(label_id):
     admin_user = require_admin()
     bad = _admin_ok(admin_user)
     if bad:
         return bad
-    db.delete_ip_label(ip)
+    db.delete_ip_label(label_id)
     return jsonify({"ok": True})
 
 
