@@ -554,6 +554,10 @@ def init_db():
         _sql("UPDATE products SET image = %s WHERE slug = %s"),
         ("salbei.jpg", "salbeitee"),
     )
+    conn.execute(
+        _sql("UPDATE products SET image = %s WHERE slug = %s"),
+        ("minze.jpg", "minztee"),
+    )
     conn.commit()
     # ---- Shipping label columns
     for col in ("dhl_shopping_cart_id", "dhl_notify_token", "dhl_label_pdf", "dhl_tracking_number", "dhl_status", "dhl_product"):
