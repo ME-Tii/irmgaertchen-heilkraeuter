@@ -3340,21 +3340,50 @@ function renderIpLabelsTable() {
   body.innerHTML = html;
 }
 
-function saveIpLabel() {
-  var ip = (document.getElementById("ipLabelIp").value || "").trim();
-  var ua = (document.getElementById("ipLabelUa").value || "").trim();
-  var name = (document.getElementById("ipLabelName").value || "").trim();
-  if (!ip) {
-    showMsg("ipLabelsMsg", "IP-Adresse eingeben.", "warning");
+function _detectDevice(ua) {
+  if (!ua) return "";
+  var lower = ua.toLowerCase();
+  if (lower.indexOf("iphone") !== -1) return "iPhone";
+  if (lower.indexOf("ipad") !== -1) return "iPad";
+  if (lower.indexOf("android") !== -1) return "Android";
+  if (lower.indexOf("windows") !== -1) return "Windows";
+  if (lower.indexOf("macintosh") !== -1 || lower.indexOf("mac os") !== -1) return "Mac";
+  if (lower.indexOf("linux") !== -1) return "Linux";
+  return "";
+}
+
+function _openFromBtn(btn) {
+  openLabelModal(btn.getAttribute("data-ip"), btn.getAttribute("data-ua"));
+}
+
+function openLabelModal(ip, ua) {
+  var device = _detectDevice(ua);
+  document.getElementById("lmIp").value = ip || "";
+  document.getElementById("lmDevice").value = device || "(unbekannt)";
+  document.getElementById("lmUa").value = ua || "";
+  document.getElementById("lmName").value = "";
+  var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("labelModal"));
+  modal.show();
+  setTimeout(function() { document.getElementById("lmName").focus(); }, 300);
+}
+
+function saveLabelFromModal() {
+  var ip = (document.getElementById("lmIp").value || "").trim();
+  var ua = (document.getElementById("lmUa").value || "").trim();
+  var device = (document.getElementById("lmDevice").value || "").trim();
+  var name = (document.getElementById("lmName").value || "").trim();
+  if (!ip) return;
+  if (!name) {
+    showMsg("ipLabelsMsg", "Name eingeben.", "warning");
     return;
   }
-  adminApi("api/admin/ip-labels", "PUT", { ip_address: ip, label: name, ua_pattern: ua })
+  var uaPattern = (device && device !== "(unbekannt)") ? device : "";
+  adminApi("api/admin/ip-labels", "PUT", { ip_address: ip, label: name, ua_pattern: uaPattern })
     .then(function() {
-      document.getElementById("ipLabelIp").value = "";
-      document.getElementById("ipLabelUa").value = "";
-      document.getElementById("ipLabelName").value = "";
+      bootstrap.Modal.getInstance(document.getElementById("labelModal")).hide();
       showMsg("ipLabelsMsg", "Gespeichert.", "success");
       loadIpLabels();
+      _fetchAuditLog();
     })
     .catch(function(err) {
       showMsg("ipLabelsMsg", "Fehler: " + (err.message || err), "danger");
@@ -3462,12 +3491,6 @@ function _ipDisplay(ip) {
   return '<code>' + esc(ip) + '</code>';
 }
 
-function _nameForIp(ip, ua) {
-  if (!ip) return '<span class="text-muted">–</span>';
-  var l = _matchLabel(ip, ua || "");
-  return l ? esc(l.label) : '<span class="text-muted">–</span>';
-}
-
 function _fetchAuditLog() {
   var action = document.getElementById("auditActionFilter") ? document.getElementById("auditActionFilter").value : "";
   var user = document.getElementById("auditUserFilter") ? document.getElementById("auditUserFilter").value : "";
@@ -3486,7 +3509,7 @@ function _fetchAuditLog() {
       var nextBtn = document.getElementById("auditNextBtn");
 
       if (!entries.length) {
-        body.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3"><i class="bi bi-inbox"></i> Keine Einträge vorhanden</td></tr>';
+        body.innerHTML = '<tr><td colspan="7" class="text-muted text-center py-3"><i class="bi bi-inbox"></i> Keine Einträge vorhanden</td></tr>';
       } else {
         var html = "";
         for (var i = 0; i < entries.length; i++) {
@@ -3501,13 +3524,20 @@ function _fetchAuditLog() {
           else if (e.action.indexOf("erstellt") !== -1) actionClass = "bg-primary";
           else if (e.action.indexOf("aktualisiert") !== -1 || e.action.indexOf("bearbeitet") !== -1) actionClass = "bg-info";
 
+          var label = _matchLabel(e.ip_address, e.user_agent);
+          var nameCell = label ? esc(label.label) : '<span class="text-muted">–</span>';
+          var btnTitle = label ? "Ändern" : "Zuordnen";
+          var btnIcon = label ? "bi-pencil" : "bi-tag";
+          var btnClass = label ? "btn-outline-secondary" : "btn-outline-irm";
+
           html += "<tr>" +
             "<td class='text-nowrap small'>" + esc(ts) + "</td>" +
             "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" : '<span class="text-muted">–</span>') + "</td>" +
             "<td><span class='badge " + actionClass + "'>" + actionLabel + "</span></td>" +
             "<td>" + _ipDisplay(e.ip_address) + "</td>" +
-            "<td>" + _nameForIp(e.ip_address, e.user_agent) + "</td>" +
+            "<td>" + nameCell + "</td>" +
             "<td class='small text-muted'>" + esc(e.details || "") + "</td>" +
+            "<td><button class='btn " + btnClass + " btn-sm py-0' title='" + btnTitle + "' data-ip='" + esc(e.ip_address) + "' data-ua='" + esc(e.user_agent || "") + "' onclick='_openFromBtn(this)'><i class='bi " + btnIcon + "'></i></button></td>" +
             "</tr>";
         }
         body.innerHTML = html;
