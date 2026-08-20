@@ -197,9 +197,28 @@ def handle_500(e):
     raise e
 
 
-# ---------------------------------------------------------------- audit logging
+# ---------------------------------------------------------------- ip blacklist
 
 _STATIC_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".css", ".js", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm"}
+
+
+@app.before_request
+def check_ip_blacklist():
+    path = request.path
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _STATIC_EXT:
+        return
+    if path.startswith("/api/admin/ip-blacklist"):
+        return
+    ip = _client_ip()
+    try:
+        if db.is_blacklisted(ip):
+            return jsonify({"error": "Zugriff gesperrt."}), 403
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------- audit logging
 
 
 @app.before_request
@@ -1897,6 +1916,40 @@ def admin_delete_ip_label(ip):
     if bad:
         return bad
     db.delete_ip_label(ip)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/admin/ip-blacklist")
+def admin_get_blacklist():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    return jsonify({"entries": db.get_ip_blacklist()})
+
+
+@app.put("/api/admin/ip-blacklist")
+def admin_add_to_blacklist():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    data = request.get_json(force=True, silent=True) or {}
+    ip_address = (data.get("ip_address") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    if not ip_address:
+        return jsonify({"error": "ip_address required"}), 400
+    db.add_to_blacklist(ip_address, reason)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/ip-blacklist/<ip>")
+def admin_remove_from_blacklist(ip):
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    db.remove_from_blacklist(ip)
     return jsonify({"ok": True})
 
 

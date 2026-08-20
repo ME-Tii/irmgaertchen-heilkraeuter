@@ -226,6 +226,11 @@ SQLITE_SCHEMA = [
         ip_address TEXT PRIMARY KEY,
         label TEXT NOT NULL DEFAULT ''
     );""",
+    """CREATE TABLE IF NOT EXISTS ip_blacklist (
+        ip_address TEXT PRIMARY KEY,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );""",
     """CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT NOT NULL DEFAULT (datetime('now')),
@@ -424,6 +429,11 @@ PG_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS ip_labels (
         ip_address TEXT PRIMARY KEY,
         label TEXT NOT NULL DEFAULT ''
+    );""",
+    """CREATE TABLE IF NOT EXISTS ip_blacklist (
+        ip_address TEXT PRIMARY KEY,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
     );""",
     """CREATE TABLE IF NOT EXISTS audit_log (
         id SERIAL PRIMARY KEY,
@@ -1983,3 +1993,39 @@ def delete_ip_label(ip_address):
     conn.execute(_sql("DELETE FROM ip_labels WHERE ip_address = %s"), (ip_address,))
     conn.commit()
     conn.close()
+
+
+# ---- ip blacklist ----
+
+def get_ip_blacklist():
+    conn = get_conn()
+    rows = conn.execute(_sql("SELECT ip_address, reason, created_at FROM ip_blacklist ORDER BY created_at DESC")).fetchall()
+    conn.close()
+    return all_rows(rows)
+
+
+def add_to_blacklist(ip_address, reason=""):
+    conn = get_conn()
+    conn.execute(
+        _sql("INSERT INTO ip_blacklist (ip_address, reason) VALUES (%s, %s) "
+             "ON CONFLICT (ip_address) DO UPDATE SET reason = excluded.reason"),
+        (ip_address, reason),
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_from_blacklist(ip_address):
+    conn = get_conn()
+    conn.execute(_sql("DELETE FROM ip_blacklist WHERE ip_address = %s"), (ip_address,))
+    conn.commit()
+    conn.close()
+
+
+def is_blacklisted(ip_address):
+    if not ip_address:
+        return False
+    conn = get_conn()
+    row = conn.execute(_sql("SELECT 1 FROM ip_blacklist WHERE ip_address = %s"), (ip_address,)).fetchone()
+    conn.close()
+    return row is not None

@@ -3374,9 +3374,66 @@ function deleteIpLabel(ip) {
     });
 }
 
+function loadBlacklist() {
+  adminApi("api/admin/ip-blacklist")
+    .then(function(data) {
+      var entries = data.entries || [];
+      var body = document.getElementById("ipBlacklistBody");
+      if (!body) return;
+      if (!entries.length) {
+        body.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-2 small">Keine gesperrten IPs</td></tr>';
+        return;
+      }
+      var html = "";
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        html += "<tr>" +
+          "<td><code>" + esc(e.ip_address) + "</code></td>" +
+          "<td class='small'>" + esc(e.reason || "–") + "</td>" +
+          "<td class='small text-muted'>" + esc(e.created_at || "") + "</td>" +
+          "<td><button class='btn btn-outline-success btn-sm py-0' onclick='removeBlacklistEntry(\"" + esc(e.ip_address) + "\")' title='Entsperren'><i class='bi bi-unlock'></i></button></td>" +
+          "</tr>";
+      }
+      body.innerHTML = html;
+    })
+    .catch(function() {});
+}
+
+function addBlacklistEntry() {
+  var ip = (document.getElementById("ipBlacklistIp").value || "").trim();
+  var reason = (document.getElementById("ipBlacklistReason").value || "").trim();
+  if (!ip) {
+    showMsg("ipBlacklistMsg", "IP-Adresse eingeben.", "warning");
+    return;
+  }
+  adminApi("api/admin/ip-blacklist", "PUT", { ip_address: ip, reason: reason })
+    .then(function() {
+      document.getElementById("ipBlacklistIp").value = "";
+      document.getElementById("ipBlacklistReason").value = "";
+      showMsg("ipBlacklistMsg", "IP gesperrt.", "success");
+      loadBlacklist();
+    })
+    .catch(function(err) {
+      showMsg("ipBlacklistMsg", "Fehler: " + (err.message || err), "danger");
+    });
+}
+
+function removeBlacklistEntry(ip) {
+  if (!confirm(ip + " entsperren?")) return;
+  adminApi("api/admin/ip-blacklist/" + encodeURIComponent(ip), "DELETE")
+    .then(function() {
+      showMsg("ipBlacklistMsg", "Entsperrt.", "success");
+      loadBlacklist();
+    })
+    .catch(function(err) {
+      showMsg("ipBlacklistMsg", "Fehler: " + (err.message || err), "danger");
+    });
+}
+
 function loadAuditLog() {
   AUDIT_LOG_PAGE = 0;
   loadIpLabels();
+  loadBlacklist();
   _fetchAuditLog();
 }
 
@@ -3388,9 +3445,13 @@ function auditLogPage(dir) {
 
 function _ipDisplay(ip) {
   if (!ip) return '<span class="text-muted">–</span>';
-  var label = IP_LABELS[ip];
-  if (label) return '<code>' + esc(ip) + '</code> <small class="text-muted">(' + esc(label) + ')</small>';
   return '<code>' + esc(ip) + '</code>';
+}
+
+function _nameForIp(ip) {
+  if (!ip) return '<span class="text-muted">–</span>';
+  var label = IP_LABELS[ip];
+  return label ? esc(label) : '<span class="text-muted">–</span>';
 }
 
 function _fetchAuditLog() {
@@ -3411,7 +3472,7 @@ function _fetchAuditLog() {
       var nextBtn = document.getElementById("auditNextBtn");
 
       if (!entries.length) {
-        body.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3"><i class="bi bi-inbox"></i> Keine Einträge vorhanden</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3"><i class="bi bi-inbox"></i> Keine Einträge vorhanden</td></tr>';
       } else {
         var html = "";
         for (var i = 0; i < entries.length; i++) {
@@ -3431,6 +3492,7 @@ function _fetchAuditLog() {
             "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" : '<span class="text-muted">–</span>') + "</td>" +
             "<td><span class='badge " + actionClass + "'>" + actionLabel + "</span></td>" +
             "<td>" + _ipDisplay(e.ip_address) + "</td>" +
+            "<td>" + _nameForIp(e.ip_address) + "</td>" +
             "<td class='small text-muted'>" + esc(e.details || "") + "</td>" +
             "</tr>";
         }
