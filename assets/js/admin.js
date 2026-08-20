@@ -612,7 +612,7 @@ function renderInventory() {
           : (isKg ? cur <= 0.5 : cur <= 5)
           ? '<span class="badge bg-warning text-dark">' + cur + unit + "</span>"
           : '<span class="badge bg-success">' + cur + unit + "</span>";
-      const imgSrc = p.image ? "assets/img/" + p.image : "assets/img/kraeutergarten.jpg";
+      const imgSrc = p.image ? "assets/img/" + p.image + "?v=" + Date.now() : "assets/img/kraeutergarten.jpg";
       const safePrice = Number(p.price);
       const priceVal = (isNaN(safePrice) ? 0 : safePrice).toFixed(2);
       const stockStep = isKg ? "0.1" : "1";
