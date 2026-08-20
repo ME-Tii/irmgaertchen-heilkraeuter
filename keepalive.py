@@ -14,7 +14,7 @@ import sys
 import time
 import urllib.request
 
-URL = "https://irmgaertchen-shop.onrender.com/api/health"
+URL = "https://irmgaertchen.de/api/health"
 INTERVAL_MINUTES = 5
 
 
