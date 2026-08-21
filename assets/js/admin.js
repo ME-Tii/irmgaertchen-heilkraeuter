@@ -3662,6 +3662,8 @@ function _fetchAuditLog() {
           var actionClass = "bg-secondary";
           if (e.action === "login") actionClass = "bg-success";
           else if (e.action === "login_failed") actionClass = "bg-danger";
+          else if (e.action === "auto_block") actionClass = "bg-danger";
+          else if (e.action === "blocked_request") actionClass = "bg-dark";
           else if (e.action === "logout") actionClass = "bg-warning text-dark";
           else if (e.action.indexOf("gelöscht") !== -1 || e.action.indexOf("geloescht") !== -1) actionClass = "bg-danger";
           else if (e.action.indexOf("erstellt") !== -1) actionClass = "bg-primary";

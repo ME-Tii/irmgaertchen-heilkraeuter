@@ -216,6 +216,7 @@ def check_ip_blacklist():
             if db.get_setting("blacklist_test_mode", "0") == "1":
                 g.blacklist_test = True
                 return
+            _log_blocked_request_once(ip, path)
             return jsonify({"error": "Zugriff gesperrt."}), 403
     except Exception as e:
         app.logger.error("Blacklist check failed: %s", e)
@@ -230,6 +231,27 @@ _PROBE_BLOCK_WINDOW = 10 * 60
 
 _probe_lock = threading.Lock()
 _probe_hits = {}
+
+_blocked_log_lock = threading.Lock()
+_blocked_log_last = {}            # ip -> letzter Protokoll-Eintrag (Epoch)
+
+
+def _log_blocked_request_once(ip, path):
+    """Blockierte IPs sichtbar halten: max. ein Eintrag je IP und 10-Minuten-Fenster."""
+    now = time.time()
+    with _blocked_log_lock:
+        if now - _blocked_log_last.get(ip, 0) < _PROBE_BLOCK_WINDOW:
+            return
+        _blocked_log_last[ip] = now
+        if len(_blocked_log_last) > 10000:
+            cutoff = now - _PROBE_BLOCK_WINDOW
+            for k in [k for k, v in _blocked_log_last.items() if v < cutoff]:
+                del _blocked_log_last[k]
+    try:
+        db.log_audit(action="blocked_request", entity="ip", entity_id=ip,
+                     details=f"Gesperrte IP versucht Zugriff – Pfad: {path}", ip_address=ip)
+    except Exception:
+        pass
 
 
 def _is_admin_sensitive_path(path):

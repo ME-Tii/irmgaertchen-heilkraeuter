@@ -656,7 +656,7 @@
             <button class="btn btn-outline-irm btn-sm" type="button" onclick="loadSecurity()"><i class="bi bi-arrow-clockwise"></i> Prüfen</button>
           </div>
         </div>
-        <p class="text-muted small mb-3">Regelbasierte Verdachtsanalyse des Protokolls (Brute-Force, Scanner, Admin-Probing u.a.). Nur Bericht – es wird nichts automatisch blockiert. Bekannte IP-Zuordnungen werden berücksichtigt.</p>
+        <p class="text-muted small mb-3">Regelbasierte Verdachtsanalyse des Protokolls (Brute-Force, Scanner, Admin-Probing u.a.). Bekannte IP-Zuordnungen werden berücksichtigt. Zusätzlich: Anonyme Zugriffe auf Admin-Pfade werden gedrosselt und bei 5 Treffern innerhalb von 10 Minuten dauerhaft automatisch gesperrt – im Blacklist-Test-Modus nur Bericht.</p>
         <div id="securityMsg" class="alert d-none" role="alert"></div>
         <div class="table-responsive">
           <table class="table table-sm table-hover align-middle">
