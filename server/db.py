@@ -1993,21 +1993,21 @@ def log_audit(action, entity="", entity_id="", details="", user_id=None, usernam
 
 def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
     conn = get_conn()
-    sql = "SELECT * FROM audit_log"
+    sql = "SELECT a.*, u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id = a.user_id"
     params = []
     conditions = []
     if action_filter:
-        conditions.append("action = %s")
+        conditions.append("a.action = %s")
         params.append(action_filter)
     if user_filter:
-        conditions.append("username = %s")
+        conditions.append("a.username = %s")
         params.append(user_filter)
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
-    sql += " ORDER BY id DESC LIMIT %s OFFSET %s"
+    sql += " ORDER BY a.id DESC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
     rows = conn.execute(_sql(sql), params).fetchall()
-    count_sql = "SELECT COUNT(*) AS c FROM audit_log"
+    count_sql = "SELECT COUNT(*) AS c FROM audit_log a"
     if conditions:
         count_sql += " WHERE " + " AND ".join(conditions)
     count_row = conn.execute(_sql(count_sql), params[:len(conditions)]).fetchone()
@@ -2018,10 +2018,12 @@ def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
 def get_audit_usernames():
     conn = get_conn()
     rows = conn.execute(
-        _sql("SELECT DISTINCT username FROM audit_log WHERE username <> '' ORDER BY username")
+        _sql("SELECT DISTINCT a.username AS username, u.name AS name "
+             "FROM audit_log a LEFT JOIN users u ON u.id = a.user_id "
+             "WHERE a.username <> '' ORDER BY a.username")
     ).fetchall()
     conn.close()
-    return [r["username"] for r in rows]
+    return [{"username": r["username"], "name": r["name"] or ""} for r in rows]
 
 
 # ---- ip labels ----

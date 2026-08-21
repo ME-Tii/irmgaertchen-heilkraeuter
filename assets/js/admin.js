@@ -3506,10 +3506,14 @@ function loadAuditUserFilter() {
       var users = data.users || [];
       var html = '<option value="">Alle Benutzer</option>';
       for (var i = 0; i < users.length; i++) {
-        html += "<option value='" + esc(users[i]) + "'>" + esc(users[i]) + "</option>";
+        var u = users[i];
+        html += "<option value='" + esc(u.username) + "'>" + esc(u.username) +
+          (u.name ? " (" + esc(u.name) + ")" : "") + "</option>";
       }
       sel.innerHTML = html;
-      if (current && users.indexOf(current) !== -1) sel.value = current;
+      for (var j = 0; j < users.length; j++) {
+        if (users[j].username === current) { sel.value = current; break; }
+      }
     })
     .catch(function() {});
 }
@@ -3574,7 +3578,8 @@ function _fetchAuditLog() {
 
           html += "<tr>" +
             "<td class='text-nowrap small'>" + esc(ts) + "</td>" +
-            "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" : '<span class="text-muted">–</span>') + "</td>" +
+            "<td>" + (e.username ? '<span class="badge bg-dark">' + esc(e.username) + "</span>" +
+              (e.user_name ? '<div class="small text-muted">' + esc(e.user_name) + "</div>" : "") : '<span class="text-muted">–</span>') + "</td>" +
             "<td><span class='badge " + actionClass + "'>" + actionLabel + "</span></td>" +
             "<td>" + _ipDisplay(e.ip_address) + "</td>" +
             "<td>" + nameCell + "</td>" +

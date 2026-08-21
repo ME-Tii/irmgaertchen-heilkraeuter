@@ -638,7 +638,8 @@ def login():
     password = data.get("password") or ""
     user = db.get_user_by_username(username)
     if not user or not check_password_hash(user["password_hash"], password):
-        _audit("login_failed", entity="user", entity_id=username, details="Falsches Passwort oder unbekannter Benutzer")
+        _audit("login_failed", entity="user", entity_id=username,
+               details=f"Benutzername: {username} – Falsches Passwort oder unbekannter Benutzer")
         return err("Benutzername oder Passwort ist falsch.", 401)
     token = secrets.token_hex(32)
     db.create_session(token, user["id"])
