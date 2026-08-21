@@ -2015,6 +2015,15 @@ def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
     return all_rows(rows), count_row["c"] if count_row else 0
 
 
+def get_audit_usernames():
+    conn = get_conn()
+    rows = conn.execute(
+        _sql("SELECT DISTINCT username FROM audit_log WHERE username <> '' ORDER BY username")
+    ).fetchall()
+    conn.close()
+    return [r["username"] for r in rows]
+
+
 # ---- ip labels ----
 
 def get_ip_labels():

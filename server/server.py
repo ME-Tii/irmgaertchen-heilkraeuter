@@ -233,6 +233,10 @@ def audit_log_request():
         return
     if path in ("/robots.txt", "/sitemap.xml", "/favicon.ico", "/api/health"):
         return
+    # Nur Seitenaufrufe und schreibende API-Aktionen protokollieren;
+    # reine API-GETs (Admin-Panel, Produktdaten, Bots) erzeugen sonst Dauerbrausen.
+    if request.method == "GET" and path.startswith("/api/"):
+        return
     ip = _client_ip()
     ua = request.headers.get("User-Agent", "")[:200]
     user = require_auth()
@@ -1909,6 +1913,15 @@ def admin_audit_log():
     user_filter = request.args.get("user", "")
     entries, total = db.get_audit_log(limit=limit, offset=offset, action_filter=action_filter, user_filter=user_filter)
     return jsonify({"entries": entries, "total": total})
+
+
+@app.get("/api/admin/audit-log/users")
+def admin_audit_log_users():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    return jsonify({"users": db.get_audit_usernames()})
 
 
 @app.get("/api/admin/ip-labels")

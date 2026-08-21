@@ -714,7 +714,7 @@
         <div class="row g-2 mb-3 align-items-end flex-wrap">
           <div class="col-auto">
             <label for="auditActionFilter" class="form-label small">Aktion</label>
-            <select class="form-select form-select-sm" id="auditActionFilter" style="min-width:180px;">
+            <select class="form-select form-select-sm" id="auditActionFilter" style="min-width:180px;" onchange="AUDIT_LOG_PAGE = 0; _fetchAuditLog();">
               <option value="">Alle Aktionen</option>
               <option value="login">Login</option>
               <option value="login_failed">Login fehlgeschlagen</option>
@@ -726,7 +726,9 @@
           </div>
           <div class="col-auto">
             <label for="auditUserFilter" class="form-label small">Benutzer</label>
-            <input type="text" class="form-control form-control-sm" id="auditUserFilter" placeholder="Benutzername" style="min-width:140px;">
+            <select class="form-select form-select-sm" id="auditUserFilter" style="min-width:160px;" onchange="AUDIT_LOG_PAGE = 0; _fetchAuditLog();">
+              <option value="">Alle Benutzer</option>
+            </select>
           </div>
           <div class="col-auto">
             <button class="btn btn-irm btn-sm" type="button" onclick="loadAuditLog()"><i class="bi bi-funnel"></i> Filtern</button>

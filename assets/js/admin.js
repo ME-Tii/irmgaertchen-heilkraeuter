@@ -3497,10 +3497,28 @@ function removeBlacklistEntry(ip) {
     });
 }
 
+function loadAuditUserFilter() {
+  var sel = document.getElementById("auditUserFilter");
+  if (!sel) return;
+  var current = sel.value || "";
+  adminApi("api/admin/audit-log/users")
+    .then(function(data) {
+      var users = data.users || [];
+      var html = '<option value="">Alle Benutzer</option>';
+      for (var i = 0; i < users.length; i++) {
+        html += "<option value='" + esc(users[i]) + "'>" + esc(users[i]) + "</option>";
+      }
+      sel.innerHTML = html;
+      if (current && users.indexOf(current) !== -1) sel.value = current;
+    })
+    .catch(function() {});
+}
+
 function loadAuditLog() {
   AUDIT_LOG_PAGE = 0;
   loadIpLabels();
   loadBlacklist();
+  loadAuditUserFilter();
   _fetchAuditLog();
 }
 
