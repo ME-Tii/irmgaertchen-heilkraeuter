@@ -403,6 +403,22 @@ def track_page_view(response):
 
 
 @app.after_request
+def static_cache_headers(response):
+    """Bandbreite sparen: Medien dürfen Browser/CDN eine Woche cachen,
+    CSS/JS einen Tag; HTML bleibt frisch."""
+    if response.status_code != 200:
+        return response
+    ext = os.path.splitext(request.path)[1].lower()
+    if ext in (".css", ".js"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    elif ext in _STATIC_EXT:
+        response.headers["Cache-Control"] = "public, max-age=604800"
+    elif ext == ".html":
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.after_request
 def inject_blacklist_test_banner(response):
     if not getattr(g, "blacklist_test", False):
         return response
