@@ -1927,6 +1927,28 @@ def admin_audit_log_users():
     return jsonify({"users": db.get_audit_usernames()})
 
 
+@app.get("/api/admin/audit-log/export")
+def admin_audit_log_export():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    action_filter = request.args.get("action", "")
+    user_filter = request.args.get("user", "")
+    anon_only = request.args.get("anon", "") == "1"
+    entries, _total = db.get_audit_log(
+        limit=min(int(request.args.get("limit", 100000)), 100000), offset=0,
+        action_filter=action_filter, user_filter=user_filter, anon_only=anon_only,
+    )
+    keys = ("id", "timestamp", "username", "user_name", "action",
+            "entity", "entity_id", "details", "ip_address", "user_agent")
+    lines = [json.dumps({k: e.get(k) for k in keys}, ensure_ascii=False) for e in entries]
+    payload = "\n".join(lines) + ("\n" if lines else "")
+    resp = app.response_class(payload, mimetype="application/x-ndjson")
+    resp.headers["Content-Disposition"] = 'attachment; filename="protokoll-%s.jsonl"' % time.strftime("%Y%m%d-%H%M%S")
+    return resp
+
+
 @app.get("/api/admin/ip-labels")
 def admin_get_ip_labels():
     admin_user = require_admin()

@@ -3536,19 +3536,34 @@ function auditLogPage(dir) {
   _fetchAuditLog();
 }
 
+function _auditLogQuery() {
+  var action = document.getElementById("auditActionFilter") ? document.getElementById("auditActionFilter").value : "";
+  var user = document.getElementById("auditUserFilter") ? document.getElementById("auditUserFilter").value : "";
+  var qs = [];
+  if (action) qs.push("action=" + encodeURIComponent(action));
+  if (user === "@anon") qs.push("anon=1");
+  else if (user) qs.push("user=" + encodeURIComponent(user));
+  return qs.join("&");
+}
+
+function downloadAuditLog() {
+  var d = new Date();
+  var pad = function(n) { return (n < 10 ? "0" : "") + n; };
+  var fname = "protokoll-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+    "-" + pad(d.getHours()) + pad(d.getMinutes()) + ".jsonl";
+  var q = _auditLogQuery();
+  downloadAuthFile("/api/admin/audit-log/export" + (q ? "?" + q : ""), fname);
+}
+
 function _ipDisplay(ip) {
   if (!ip) return '<span class="text-muted">–</span>';
   return '<code>' + esc(ip) + '</code>';
 }
 
 function _fetchAuditLog() {
-  var action = document.getElementById("auditActionFilter") ? document.getElementById("auditActionFilter").value : "";
-  var user = document.getElementById("auditUserFilter") ? document.getElementById("auditUserFilter").value : "";
   var offset = AUDIT_LOG_PAGE * AUDIT_LOG_PAGE_SIZE;
-  var url = "api/admin/audit-log?limit=" + AUDIT_LOG_PAGE_SIZE + "&offset=" + offset;
-  if (action) url += "&action=" + encodeURIComponent(action);
-  if (user === "@anon") url += "&anon=1";
-  else if (user) url += "&user=" + encodeURIComponent(user);
+  var q = _auditLogQuery();
+  var url = "api/admin/audit-log?limit=" + AUDIT_LOG_PAGE_SIZE + "&offset=" + offset + (q ? "&" + q : "");
 
   adminApi(url)
     .then(function(data) {
