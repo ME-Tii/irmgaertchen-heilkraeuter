@@ -1912,7 +1912,9 @@ def admin_audit_log():
     offset = max(int(request.args.get("offset", 0)), 0)
     action_filter = request.args.get("action", "")
     user_filter = request.args.get("user", "")
-    entries, total = db.get_audit_log(limit=limit, offset=offset, action_filter=action_filter, user_filter=user_filter)
+    anon_only = request.args.get("anon", "") == "1"
+    entries, total = db.get_audit_log(limit=limit, offset=offset, action_filter=action_filter,
+                                      user_filter=user_filter, anon_only=anon_only)
     return jsonify({"entries": entries, "total": total})
 
 

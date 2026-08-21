@@ -728,6 +728,7 @@
             <label for="auditUserFilter" class="form-label small">Benutzer</label>
             <select class="form-select form-select-sm" id="auditUserFilter" style="min-width:160px;" onchange="AUDIT_LOG_PAGE = 0; _fetchAuditLog();">
               <option value="">Alle Benutzer</option>
+              <option value="@anon">Nicht angemeldet</option>
             </select>
           </div>
           <div class="col-auto">

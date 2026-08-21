@@ -1991,26 +1991,28 @@ def log_audit(action, entity="", entity_id="", details="", user_id=None, usernam
     conn.close()
 
 
-def get_audit_log(limit=100, offset=0, action_filter="", user_filter=""):
+def get_audit_log(limit=100, offset=0, action_filter="", user_filter="", anon_only=False):
     conn = get_conn()
     sql = "SELECT a.*, u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id = a.user_id"
-    params = []
+    filter_params = []
     conditions = []
     if action_filter:
         conditions.append("a.action = %s")
-        params.append(action_filter)
-    if user_filter:
+        filter_params.append(action_filter)
+    if anon_only:
+        conditions.append("a.username = ''")
+    elif user_filter:
         conditions.append("a.username = %s")
-        params.append(user_filter)
+        filter_params.append(user_filter)
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY a.id DESC LIMIT %s OFFSET %s"
-    params.extend([limit, offset])
+    params = filter_params + [limit, offset]
     rows = conn.execute(_sql(sql), params).fetchall()
     count_sql = "SELECT COUNT(*) AS c FROM audit_log a"
     if conditions:
         count_sql += " WHERE " + " AND ".join(conditions)
-    count_row = conn.execute(_sql(count_sql), params[:len(conditions)]).fetchone()
+    count_row = conn.execute(_sql(count_sql), filter_params).fetchone()
     conn.close()
     return all_rows(rows), count_row["c"] if count_row else 0
 

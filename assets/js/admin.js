@@ -3504,15 +3504,19 @@ function loadAuditUserFilter() {
   adminApi("api/admin/audit-log/users")
     .then(function(data) {
       var users = data.users || [];
-      var html = '<option value="">Alle Benutzer</option>';
+      var html = '<option value="">Alle Benutzer</option>' +
+        '<option value="@anon">Nicht angemeldet</option>';
       for (var i = 0; i < users.length; i++) {
         var u = users[i];
         html += "<option value='" + esc(u.username) + "'>" + esc(u.username) +
           (u.name ? " (" + esc(u.name) + ")" : "") + "</option>";
       }
       sel.innerHTML = html;
-      for (var j = 0; j < users.length; j++) {
-        if (users[j].username === current) { sel.value = current; break; }
+      if (current === "@anon") { sel.value = current; }
+      else {
+        for (var j = 0; j < users.length; j++) {
+          if (users[j].username === current) { sel.value = current; break; }
+        }
       }
     })
     .catch(function() {});
@@ -3543,7 +3547,8 @@ function _fetchAuditLog() {
   var offset = AUDIT_LOG_PAGE * AUDIT_LOG_PAGE_SIZE;
   var url = "api/admin/audit-log?limit=" + AUDIT_LOG_PAGE_SIZE + "&offset=" + offset;
   if (action) url += "&action=" + encodeURIComponent(action);
-  if (user) url += "&user=" + encodeURIComponent(user);
+  if (user === "@anon") url += "&anon=1";
+  else if (user) url += "&user=" + encodeURIComponent(user);
 
   adminApi(url)
     .then(function(data) {
