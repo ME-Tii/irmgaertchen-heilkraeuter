@@ -2031,6 +2031,8 @@ def get_audit_usernames():
 
 # ---- security monitor (rein heuristisch, report-only) ----
 
+ADMIN_PAGE = os.environ.get("IRM_ADMIN_PAGE", "verwaltung-7OXYrM.html")
+
 _GOOD_BOTS = ("googlebot", "bingbot", "duckduckbot", "baiduspider", "yandexbot")
 
 
@@ -2132,7 +2134,10 @@ def get_security_findings(window_hours=24):
                 len(rs), min(r["_ts"] for r in rs), max(r["_ts"] for r in rs))
 
         probes = [r for r in rs if not r["username"] and (
-            r["action"].endswith("/admin.html") or "/api/admin/" in r["action"])]
+            r["action"].endswith("/admin.html")
+            or r["action"].endswith("/" + ADMIN_PAGE)
+            or r["action"].endswith("/admin")
+            or "/api/admin/" in r["action"])]
         if probes:
             pts = sorted(r["_ts"] for r in probes)
             add("admin_probing", "Probing auf Admin-Bereich", "hoch", ip,

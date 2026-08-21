@@ -222,6 +222,73 @@ def check_ip_blacklist():
         return jsonify({"error": "Zugriff gesperrt."}), 403
 
 
+# ---------------------------------------------------------------- admin-path Schutz
+
+_ADMIN_PROBE_RATE = 20            # anonyme Requests je Minute auf Admin-Pfade
+_PROBE_BLOCK_THRESHOLD = 5        # Treffer im Fenster -> Auto-Block (dauerhaft)
+_PROBE_BLOCK_WINDOW = 10 * 60
+
+_probe_lock = threading.Lock()
+_probe_hits = {}
+
+
+def _is_admin_sensitive_path(path):
+    return (
+        path == "/admin.html"
+        or path == "/" + db.ADMIN_PAGE
+        or path == "/admin"
+        or path.startswith("/api/admin/")
+    )
+
+
+@app.before_request
+def protect_admin_paths():
+    global _probe_hits
+    path = request.path
+    if not _is_admin_sensitive_path(path):
+        return
+    if require_auth():
+        return
+    ip = _client_ip()
+    now = time.time()
+
+    # 1) Drosselung: anonyme Admin-Pfad-Zugriffe bremsen
+    if not _rate_limit("adminprobe", _ADMIN_PROBE_RATE, 60):
+        return err("Zu viele Anfragen. Bitte kurz warten.", 429)
+
+    # 2) Auto-Block: Schwelle erreicht -> dauerhaft auf die Blacklist
+    with _probe_lock:
+        hits = [t for t in _probe_hits.get(ip, []) if now - t < _PROBE_BLOCK_WINDOW]
+        hits.append(now)
+        _probe_hits[ip] = hits
+        if len(_probe_hits) > 10000:
+            cutoff = now - _PROBE_BLOCK_WINDOW
+            _probe_hits = {k: v for k, v in _probe_hits.items() if v and v[-1] > cutoff}
+        triggered = len(hits) >= _PROBE_BLOCK_THRESHOLD
+        if triggered:
+            _probe_hits[ip] = []  # erst wieder pruefen, wenn das Fenster neu voll ist
+
+    if not triggered:
+        return
+    try:
+        if db.is_blacklisted(ip):
+            return
+        labeled = {l["ip_address"] for l in db.get_ip_labels()}
+        if ip in labeled:
+            return
+        test_mode = db.get_setting("blacklist_test_mode", "0") == "1"
+        reason = "auto: Admin-Probing"
+        details = (f"{_PROBE_BLOCK_THRESHOLD}+ anonyme Zugriffe auf Admin-Pfade "
+                   f"innerhalb von {_PROBE_BLOCK_WINDOW // 60} Minuten")
+        if not test_mode:
+            db.add_to_blacklist(ip, reason)
+        else:
+            reason += " (Test-Modus: nicht geblockt)"
+        _audit("auto_block", entity="ip", entity_id=ip, details=f"{reason} – {details}")
+    except Exception as e:
+        app.logger.error("Auto-Block fehlgeschlagen: %s", e)
+
+
 # ---------------------------------------------------------------- audit logging
 
 
@@ -256,7 +323,7 @@ def track_page_view(response):
         request.method == "GET"
         and not path.startswith("/api/")
         and not path.startswith("/assets/")
-        and path not in ("/admin.html", "/admin", "/robots.txt", "/sitemap.xml", "/favicon.ico")
+        and path not in ("/" + db.ADMIN_PAGE, "/admin", "/robots.txt", "/sitemap.xml", "/favicon.ico")
         and response.status_code < 400
     ):
         try:
@@ -440,7 +507,6 @@ def robots_txt():
         "User-agent: *\n"
         "Allow: /\n"
         "Disallow: /api/\n"
-        "Disallow: /admin.html\n"
         "Disallow: /cart.html\n"
         "Disallow: /konto.html\n"
         "Disallow: /bestellung-erfolgreich.html\n"
