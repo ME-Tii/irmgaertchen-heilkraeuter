@@ -1927,6 +1927,19 @@ def admin_audit_log_users():
     return jsonify({"users": db.get_audit_usernames()})
 
 
+@app.get("/api/admin/threats")
+def admin_threats():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    try:
+        hours = min(max(int(request.args.get("hours", 24)), 1), 168)
+    except (TypeError, ValueError):
+        hours = 24
+    return jsonify({"findings": db.get_security_findings(hours), "hours": hours})
+
+
 @app.get("/api/admin/audit-log/export")
 def admin_audit_log_export():
     admin_user = require_admin()

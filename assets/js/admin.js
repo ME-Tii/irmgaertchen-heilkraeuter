@@ -140,6 +140,7 @@ function switchTab(tab) {
   const couponsPanel = document.getElementById("couponsPanel");
   const emailsPanel = document.getElementById("emailsPanel");
   const auditlogPanel = document.getElementById("auditlogPanel");
+  const securityPanel = document.getElementById("securityPanel");
   if (ordersPanel) ordersPanel.classList.toggle("d-none", tab !== "orders");
   if (customersPanel) customersPanel.classList.toggle("d-none", tab !== "customers");
   if (inventory) inventory.classList.toggle("d-none", tab !== "inventory");
@@ -150,6 +151,7 @@ function switchTab(tab) {
   if (couponsPanel) couponsPanel.classList.toggle("d-none", tab !== "coupons");
   if (emailsPanel) emailsPanel.classList.toggle("d-none", tab !== "emails");
   if (auditlogPanel) auditlogPanel.classList.toggle("d-none", tab !== "auditlog");
+  if (securityPanel) securityPanel.classList.toggle("d-none", tab !== "security");
   try {
     if (tab === "customers") loadCustomers();
     if (tab === "inventory") renderInventory();
@@ -159,6 +161,7 @@ function switchTab(tab) {
     if (tab === "coupons") renderCoupons();
     if (tab === "emails") loadEmailTemplates();
     if (tab === "auditlog") loadAuditLog();
+    if (tab === "security") loadSecurity();
   } catch (e) {
     console.error("Tab-Fehler:", e);
     showMsg("ordersMsg", "Fehler beim Anzeigen: " + (e && e.message ? e.message : e), "danger");
@@ -3305,6 +3308,54 @@ function showCustomerDetail(userId) {
     });
 }
 
+// ---------------------------------------------------------------- security monitor
+
+var SEVERITY_BADGE = { "hoch": "bg-danger", "mittel": "bg-warning text-dark", "niedrig": "bg-secondary" };
+
+function loadSecurity() {
+  var hours = document.getElementById("securityWindow") ? document.getElementById("securityWindow").value : "24";
+  adminApi("api/admin/threats?hours=" + encodeURIComponent(hours))
+    .then(function(data) {
+      renderSecurity(data.findings || [], data.hours || 24);
+    })
+    .catch(function(err) {
+      showMsg("securityMsg", "Fehler beim Laden: " + (err.message || err), "danger");
+    });
+}
+
+function renderSecurity(findings, hours) {
+  var body = document.getElementById("securityBody");
+  if (!body) return;
+  if (!findings.length) {
+    body.innerHTML = '<tr><td colspan="6" class="text-center py-3"><i class="bi bi-check-circle text-success"></i> Keine verdächtigen Aktivitäten in den letzten ' + esc(hours) + ' Stunden</td></tr>';
+    return;
+  }
+  var html = "";
+  for (var i = 0; i < findings.length; i++) {
+    var f = findings[i];
+    var badge = SEVERITY_BADGE[f.severity] || "bg-secondary";
+    var ipCell = "<code>" + esc(f.ip) + "</code>" +
+      (f.label ? '<div class="small text-muted">' + esc(f.label) + "</div>" : "");
+    var period = (f.first_seen || "") + "<br>" + (f.last_seen || "");
+    var details = esc(f.detail || "");
+    if (f.usernames && f.usernames.length) {
+      details += '<div class="small text-muted">Benutzernamen: ' + esc(f.usernames.join(", ")) + "</div>";
+    }
+    if (f.sample_paths && f.sample_paths.length) {
+      details += '<div class="small text-muted">' + f.sample_paths.map(function(p) { return esc(p); }).join("<br>") + "</div>";
+    }
+    html += "<tr>" +
+      "<td><span class='badge " + badge + "'>" + esc(f.severity) + "</span></td>" +
+      "<td>" + esc(f.title) + "</td>" +
+      "<td>" + ipCell + "</td>" +
+      "<td>" + esc(f.count) + "</td>" +
+      "<td class='text-nowrap small'>" + period + "</td>" +
+      "<td class='small'>" + details + "</td>" +
+      "</tr>";
+  }
+  body.innerHTML = html;
+}
+
 // ---------------------------------------------------------------- audit log
 
 var AUDIT_LOG_PAGE = 0;
@@ -3496,6 +3547,8 @@ function removeBlacklistEntry(ip) {
       showMsg("ipBlacklistMsg", "Fehler: " + (err.message || err), "danger");
     });
 }
+
+// ---------------------------------------------------------------- audit log
 
 function loadAuditUserFilter() {
   var sel = document.getElementById("auditUserFilter");

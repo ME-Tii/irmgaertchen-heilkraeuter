@@ -1,4 +1,5 @@
 import os
+import calendar
 import hashlib
 import sqlite3
 import json
@@ -2026,6 +2027,131 @@ def get_audit_usernames():
     ).fetchall()
     conn.close()
     return [{"username": r["username"], "name": r["name"] or ""} for r in rows]
+
+
+# ---- security monitor (rein heuristisch, report-only) ----
+
+_GOOD_BOTS = ("googlebot", "bingbot", "duckduckbot", "baiduspider", "yandexbot")
+
+
+def _parse_audit_ts(value):
+    if not value:
+        return None
+    s = str(value).replace("T", " ").rstrip("Z").strip()
+    try:
+        return calendar.timegm(time.strptime(s[:19], "%Y-%m-%d %H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def get_security_findings(window_hours=24):
+    conn = get_conn()
+    rows = conn.execute(
+        _sql("SELECT timestamp, username, action, entity_id, details, ip_address, user_agent "
+             "FROM audit_log ORDER BY id DESC LIMIT 200000")
+    ).fetchall()
+    labels = conn.execute(_sql("SELECT ip_address, label FROM ip_labels")).fetchall()
+    conn.close()
+
+    label_by_ip = {}
+    for l in labels:
+        label_by_ip.setdefault(l["ip_address"], l["label"])
+
+    cutoff = time.time() - window_hours * 3600
+    recent = []
+    for r in rows:
+        ts = _parse_audit_ts(r["timestamp"])
+        if ts is None or ts < cutoff:
+            continue
+        d = dict(r)
+        d["_ts"] = ts
+        recent.append(d)
+
+    by_ip = {}
+    for r in recent:
+        by_ip.setdefault(r["ip_address"] or "unbekannt", []).append(r)
+
+    findings = []
+
+    def add(rule, title, severity, ip, detail, count, first_ts=None, last_ts=None, extra=None):
+        f = {
+            "rule": rule, "title": title, "severity": severity, "ip": ip,
+            "detail": detail, "count": count,
+            "label": label_by_ip.get(ip, ""),
+            "first_seen": "", "last_seen": "",
+        }
+        if first_ts:
+            f["first_seen"] = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(first_ts))
+        if last_ts:
+            f["last_seen"] = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(last_ts))
+        if extra:
+            f.update(extra)
+        findings.append(f)
+
+    brute_window = 15 * 60
+
+    for ip, rs in by_ip.items():
+        ua = ""
+        for r in rs:
+            if r["user_agent"]:
+                ua = r["user_agent"]
+                break
+        good_bot = any(b in ua.lower() for b in _GOOD_BOTS)
+
+        fails = [r for r in rs if r["action"] == "login_failed"]
+        if fails:
+            fts = sorted(r["_ts"] for r in fails)
+            max_burst, burst_from, burst_to = 0, None, None
+            for i, t in enumerate(fts):
+                j = i
+                while j < len(fts) and fts[j] - t <= brute_window:
+                    j += 1
+                if j - i > max_burst:
+                    max_burst, burst_from, burst_to = j - i, t, fts[j - 1]
+            if max_burst >= 5:
+                add("brute_force", "Brute-Force-Verdacht (Anmeldungen)", "hoch", ip,
+                    f"{max_burst} fehlgeschlagene Logins innerhalb von 15 Minuten",
+                    max_burst, burst_from, burst_to)
+            usernames = sorted({r["entity_id"] for r in fails if r["entity_id"]})
+            if len(usernames) >= 3:
+                add("credential_stuffing", "Credential-Stuffing-Verdacht", "hoch", ip,
+                    f"Fehlgeschlagene Logins für {len(usernames)} verschiedene Benutzernamen",
+                    len(fails), fts[0], fts[-1], {"usernames": usernames})
+
+        gets = [r for r in rs if r["action"].startswith("GET ") and not r["username"]]
+        paths = sorted({r["action"][4:].split("?")[0] for r in gets})
+        if not good_bot and len(paths) >= 30:
+            add("scanner", "Scan-/Crawl-Verdacht", "mittel", ip,
+                f"{len(paths)} verschiedene Pfade ohne Anmeldung aufgerufen",
+                len(gets), min(r["_ts"] for r in gets), max(r["_ts"] for r in gets),
+                {"sample_paths": paths[:10]})
+
+        if not good_bot and len(rs) >= 400:
+            add("flood", "Ungewöhnlich hohes Anfrageaufkommen", "mittel", ip,
+                f"{len(rs)} Anfragen im Zeitraum ({window_hours} h)",
+                len(rs), min(r["_ts"] for r in rs), max(r["_ts"] for r in rs))
+
+        probes = [r for r in rs if not r["username"] and (
+            r["action"].endswith("/admin.html") or "/api/admin/" in r["action"])]
+        if probes:
+            pts = sorted(r["_ts"] for r in probes)
+            add("admin_probing", "Probing auf Admin-Bereich", "hoch", ip,
+                f"{len(probes)} Zugriffe auf Admin-Pfade ohne Anmeldung",
+                len(probes), pts[0], pts[-1],
+                {"sample_paths": sorted({r["action"] for r in probes})[:10]})
+
+    empty_ua = [r for r in recent if not (r["user_agent"] or "").strip() and not r["username"]]
+    if empty_ua:
+        ips = sorted({r["ip_address"] or "unbekannt" for r in empty_ua})
+        ets = sorted(r["_ts"] for r in empty_ua)
+        add("empty_ua", "Anfragen ohne User-Agent", "niedrig",
+            ", ".join(ips[:5]) + ("…" if len(ips) > 5 else ""),
+            f"{len(empty_ua)} Anfragen ohne User-Agent von {len(ips)} IPs",
+            len(empty_ua), ets[0], ets[-1])
+
+    order = {"hoch": 0, "mittel": 1, "niedrig": 2}
+    findings.sort(key=lambda f: (order.get(f["severity"], 3), -(f["count"] or 0)))
+    return findings[:100]
 
 
 # ---- ip labels ----

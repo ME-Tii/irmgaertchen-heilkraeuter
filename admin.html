@@ -67,6 +67,7 @@
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="coupons" onclick="switchTab('coupons')"><i class="bi bi-tag"></i> Gutscheine</button></li>
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="emails" onclick="switchTab('emails')"><i class="bi bi-envelope-gear"></i> E-Mails</button></li>
         <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="auditlog" onclick="switchTab('auditlog')"><i class="bi bi-shield-lock"></i> Protokoll</button></li>
+        <li class="nav-item"><button class="nav-link admin-tab" type="button" data-tab="security" onclick="switchTab('security')"><i class="bi bi-shield-exclamation"></i> Sicherheit</button></li>
       </ul>
 
       <div id="ordersPanel">
@@ -641,6 +642,39 @@
         </div>
 
         <div id="emailsList"></div>
+      </div>
+
+      <div id="securityPanel" class="d-none">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <h2 class="h5 mb-0"><i class="bi bi-shield-exclamation"></i> Sicherheits-Monitor</h2>
+          <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm" id="securityWindow" style="min-width:140px;" onchange="loadSecurity()">
+              <option value="24">Letzte 24 Stunden</option>
+              <option value="72">Letzte 3 Tage</option>
+              <option value="168">Letzte 7 Tage</option>
+            </select>
+            <button class="btn btn-outline-irm btn-sm" type="button" onclick="loadSecurity()"><i class="bi bi-arrow-clockwise"></i> Prüfen</button>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">Regelbasierte Verdachtsanalyse des Protokolls (Brute-Force, Scanner, Admin-Probing u.a.). Nur Bericht – es wird nichts automatisch blockiert. Bekannte IP-Zuordnungen werden berücksichtigt.</p>
+        <div id="securityMsg" class="alert d-none" role="alert"></div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Schwere</th>
+                <th>Befund</th>
+                <th>IP / Zuordnung</th>
+                <th>Anzahl</th>
+                <th>Zeitraum</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="securityBody">
+              <tr><td colspan="6" class="text-muted text-center py-3">Noch nicht geprüft</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div id="auditlogPanel" class="d-none">
