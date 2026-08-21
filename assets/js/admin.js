@@ -3316,16 +3316,26 @@ function loadSecurity() {
   var hours = document.getElementById("securityWindow") ? document.getElementById("securityWindow").value : "24";
   adminApi("api/admin/threats?hours=" + encodeURIComponent(hours))
     .then(function(data) {
-      renderSecurity(data.findings || [], data.hours || 24);
+      renderSecurity(data.findings || [], data.hours || 24, data.blocked_ips || []);
     })
     .catch(function(err) {
       showMsg("securityMsg", "Fehler beim Laden: " + (err.message || err), "danger");
     });
 }
 
-function renderSecurity(findings, hours) {
+function renderSecurity(findings, hours, blockedIps) {
   var body = document.getElementById("securityBody");
   if (!body) return;
+  var blocked = {};
+  (blockedIps || []).forEach(function(ip) { blocked[ip] = true; });
+  function ipCellHtml(raw) {
+    return String(raw).split(",").map(function(part) {
+      var ip = part.trim().replace(/…$/, "").trim();
+      if (!ip) return "";
+      var tag = blocked[ip] ? ' <span class="badge bg-danger ms-1" title="Diese IP ist auf der Blacklist">Gesperrt</span>' : "";
+      return "<code>" + esc(ip) + "</code>" + tag;
+    }).filter(Boolean).join("<br>");
+  }
   if (!findings.length) {
     body.innerHTML = '<tr><td colspan="7" class="text-center py-3"><i class="bi bi-check-circle text-success"></i> Keine verdächtigen Aktivitäten in den letzten ' + esc(hours) + ' Stunden</td></tr>';
     return;
@@ -3334,7 +3344,7 @@ function renderSecurity(findings, hours) {
   for (var i = 0; i < findings.length; i++) {
     var f = findings[i];
     var badge = SEVERITY_BADGE[f.severity] || "bg-secondary";
-    var ipCell = "<code>" + esc(f.ip) + "</code>" +
+    var ipCell = ipCellHtml(f.ip) +
       (f.label ? '<div class="small text-muted">' + esc(f.label) + "</div>" : "");
     var period = (f.first_seen || "") + "<br>" + (f.last_seen || "");
     var details = esc(f.detail || "");
@@ -3344,11 +3354,14 @@ function renderSecurity(findings, hours) {
     if (f.sample_paths && f.sample_paths.length) {
       details += '<div class="small text-muted">' + f.sample_paths.map(function(p) { return esc(p); }).join("<br>") + "</div>";
     }
-    var singleIp = /^[0-9A-Za-z.:]+$/.test(f.ip || "");
-    var actionCell = singleIp
-      ? "<button class='btn btn-outline-danger btn-sm py-0' title='" + esc(f.ip) + " dauerhaft sperren' onclick='blockThreatIp(\"" + esc(f.ip) + "\")'><i class='bi bi-slash-circle'></i> Sperren</button>"
-      : '<span class="text-muted small">–</span>';
-    html += "<tr>" +
+    var ips = String(f.ip).split(",").map(function(s) { return s.trim().replace(/…$/, "").trim(); }).filter(Boolean);
+    var allBlocked = ips.length > 0 && ips.every(function(ip) { return blocked[ip]; });
+    var actionCell = allBlocked
+      ? '<span class="badge bg-danger">Gesperrt</span>'
+      : (/^[0-9A-Za-z.:]+$/.test(f.ip || "")
+        ? "<button class='btn btn-outline-danger btn-sm py-0' title='" + esc(f.ip) + " dauerhaft sperren' onclick='blockThreatIp(\"" + esc(f.ip) + "\")'><i class='bi bi-slash-circle'></i> Sperren</button>"
+        : '<span class="text-muted small">–</span>');
+    html += "<tr" + (allBlocked ? ' class="table-danger"' : "") + ">" +
       "<td><span class='badge " + badge + "'>" + esc(f.severity) + "</span></td>" +
       "<td>" + esc(f.title) + "</td>" +
       "<td>" + ipCell + "</td>" +
@@ -3485,11 +3498,16 @@ function _matchLabel(ip, ua) {
   return best;
 }
 
+var BLACKLIST_MAP = {};
+var _blacklistLoaded = null;
+
 function loadBlacklist() {
   loadBlacklistSettings();
-  adminApi("api/admin/ip-blacklist")
+  _blacklistLoaded = adminApi("api/admin/ip-blacklist")
     .then(function(data) {
       var entries = data.entries || [];
+      BLACKLIST_MAP = {};
+      for (var i = 0; i < entries.length; i++) BLACKLIST_MAP[entries[i].ip_address] = true;
       var body = document.getElementById("ipBlacklistBody");
       if (!body) return;
       if (!entries.length) {
@@ -3509,6 +3527,7 @@ function loadBlacklist() {
       body.innerHTML = html;
     })
     .catch(function() {});
+  return _blacklistLoaded;
 }
 
 function loadBlacklistSettings() {
@@ -3651,7 +3670,10 @@ function downloadAuditLog() {
 
 function _ipDisplay(ip) {
   if (!ip) return '<span class="text-muted">–</span>';
-  return '<code>' + esc(ip) + '</code>';
+  var badge = BLACKLIST_MAP[ip]
+    ? ' <span class="badge bg-danger ms-1" title="Diese IP ist auf der Blacklist"><i class="bi bi-shield-x"></i> Gesperrt</span>'
+    : "";
+  return '<code>' + esc(ip) + '</code>' + badge;
 }
 
 function _fetchAuditLog() {
@@ -3659,6 +3681,7 @@ function _fetchAuditLog() {
   var q = _auditLogQuery();
   var url = "api/admin/audit-log?limit=" + AUDIT_LOG_PAGE_SIZE + "&offset=" + offset + (q ? "&" + q : "");
 
+  (_blacklistLoaded || Promise.resolve()).then(function() {
   adminApi(url)
     .then(function(data) {
       var entries = data.entries || [];
@@ -3715,4 +3738,5 @@ function _fetchAuditLog() {
     .catch(function(err) {
       showMsg("auditLogMsg", "Fehler beim Laden: " + (err.message || err), "danger");
     });
+  });
 }

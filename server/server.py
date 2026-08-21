@@ -31,7 +31,7 @@ def load_env():
 load_env()
 
 import stripe
-from flask import Flask, Response, g, jsonify, request, redirect, render_template, send_from_directory
+from flask import Flask, Response, g, jsonify, request, redirect, render_template, send_from_directory, has_request_context
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import db
@@ -158,8 +158,11 @@ def require_auth():
 
 
 def _audit(action, entity="", entity_id="", details="", user=None):
-    ip = _client_ip()
-    ua = request.headers.get("User-Agent", "")[:200]
+    if has_request_context():
+        ip = _client_ip()
+        ua = request.headers.get("User-Agent", "")[:200]
+    else:
+        ip, ua = "", ""
     uid = user["id"] if user else None
     uname = user["username"] if user else ""
     try:
@@ -213,6 +216,16 @@ def check_ip_blacklist():
     ip = _client_ip()
     try:
         if db.is_blacklisted(ip):
+            # Angemeldete Administratoren sind nie gesperrt (Notfall-Ausweg
+            # gegen Selbst-Sperrung; Sperren lassen sich im Panel entfernen).
+            admin_user = require_auth()
+            if admin_user and admin_user.get("role") == "admin":
+                return
+            if path == "/api/login":
+                # Login erreichbar halten, damit ein gesperrter Admin sich
+                # wieder anmelden kann; login() prueft das Flag unten.
+                g.blacklist_login_attempt = True
+                return
             if db.get_setting("blacklist_test_mode", "0") == "1":
                 g.blacklist_test = True
                 return
@@ -749,6 +762,10 @@ def login():
         _audit("login_failed", entity="user", entity_id=username,
                details=f"Benutzername: {username} – Falsches Passwort oder unbekannter Benutzer")
         return err("Benutzername oder Passwort ist falsch.", 401)
+    if getattr(g, "blacklist_login_attempt", False) and user["role"] != "admin":
+        _audit("login_failed", entity="user", entity_id=username,
+               details=f"Benutzername: {username} – Login von gesperrter IP abgelehnt")
+        return err("Zugriff gesperrt.", 403)
     token = secrets.token_hex(32)
     db.create_session(token, user["id"])
     _audit("login", entity="user", entity_id=username, user=user)
@@ -2045,7 +2062,15 @@ def admin_threats():
         hours = min(max(int(request.args.get("hours", 24)), 1), 168)
     except (TypeError, ValueError):
         hours = 24
-    return jsonify({"findings": db.get_security_findings(hours), "hours": hours})
+    findings = db.get_security_findings(hours)
+    candidates = set()
+    for f in findings:
+        for part in str(f["ip"]).split(","):
+            p = part.strip().rstrip("…").strip()
+            if re.fullmatch(r"[0-9A-Za-z.:]{3,45}", p):
+                candidates.add(p)
+    blocked_ips = sorted(ip for ip in candidates if db.is_blacklisted(ip))
+    return jsonify({"findings": findings, "hours": hours, "blocked_ips": blocked_ips})
 
 
 @app.post("/api/admin/threats/block")
@@ -2789,6 +2814,25 @@ def _start_scheduler():
     t.start()
 
 _start_scheduler()
+
+
+def _startup_unblock():
+    """Notfall-Ausweg: IRM_UNBLOCK_IPS=comma-separated IPs werden beim Start von der Blacklist entfernt."""
+    raw = os.environ.get("IRM_UNBLOCK_IPS", "").strip()
+    if not raw:
+        return
+    for ip in [p.strip() for p in raw.split(",") if p.strip()]:
+        try:
+            if db.is_blacklisted(ip):
+                db.remove_from_blacklist(ip)
+                _audit("unblock", entity="ip", entity_id=ip,
+                       details="Über IRM_UNBLOCK_IPS beim Start von der Blacklist entfernt")
+                app.logger.warning("IRM_UNBLOCK_IPS: %s von der Blacklist entfernt", ip)
+        except Exception as e:
+            app.logger.error("IRM_UNBLOCK_IPS fehlgeschlagen (%s): %s", ip, e)
+
+
+_startup_unblock()
 
 
 if __name__ == "__main__":
