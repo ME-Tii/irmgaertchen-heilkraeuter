@@ -3546,13 +3546,37 @@ function _auditLogQuery() {
   return qs.join("&");
 }
 
+function downloadAdminFile(path, filename) {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const headers = {};
+  if (token) headers["Authorization"] = "Bearer " + token;
+  fetch(path, { headers }).then(function(r) {
+    if (!r.ok) {
+      r.json().then(function(d) { showMsg("auditLogMsg", d.error || "Fehler", "danger"); })
+        .catch(function() { showMsg("auditLogMsg", "Fehler (HTTP " + r.status + ")", "danger"); });
+      return null;
+    }
+    return r.blob();
+  }).then(function(blob) {
+    if (!blob) return;
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+
 function downloadAuditLog() {
   var d = new Date();
   var pad = function(n) { return (n < 10 ? "0" : "") + n; };
   var fname = "protokoll-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
     "-" + pad(d.getHours()) + pad(d.getMinutes()) + ".jsonl";
   var q = _auditLogQuery();
-  downloadAuthFile("/api/admin/audit-log/export" + (q ? "?" + q : ""), fname);
+  downloadAdminFile("/api/admin/audit-log/export" + (q ? "?" + q : ""), fname);
 }
 
 function _ipDisplay(ip) {
