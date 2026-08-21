@@ -3327,7 +3327,7 @@ function renderSecurity(findings, hours) {
   var body = document.getElementById("securityBody");
   if (!body) return;
   if (!findings.length) {
-    body.innerHTML = '<tr><td colspan="6" class="text-center py-3"><i class="bi bi-check-circle text-success"></i> Keine verdächtigen Aktivitäten in den letzten ' + esc(hours) + ' Stunden</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="text-center py-3"><i class="bi bi-check-circle text-success"></i> Keine verdächtigen Aktivitäten in den letzten ' + esc(hours) + ' Stunden</td></tr>';
     return;
   }
   var html = "";
@@ -3344,6 +3344,10 @@ function renderSecurity(findings, hours) {
     if (f.sample_paths && f.sample_paths.length) {
       details += '<div class="small text-muted">' + f.sample_paths.map(function(p) { return esc(p); }).join("<br>") + "</div>";
     }
+    var singleIp = /^[0-9A-Za-z.:]+$/.test(f.ip || "");
+    var actionCell = singleIp
+      ? "<button class='btn btn-outline-danger btn-sm py-0' title='" + esc(f.ip) + " dauerhaft sperren' onclick='blockThreatIp(\"" + esc(f.ip) + "\")'><i class='bi bi-slash-circle'></i> Sperren</button>"
+      : '<span class="text-muted small">–</span>';
     html += "<tr>" +
       "<td><span class='badge " + badge + "'>" + esc(f.severity) + "</span></td>" +
       "<td>" + esc(f.title) + "</td>" +
@@ -3351,9 +3355,22 @@ function renderSecurity(findings, hours) {
       "<td>" + esc(f.count) + "</td>" +
       "<td class='text-nowrap small'>" + period + "</td>" +
       "<td class='small'>" + details + "</td>" +
+      "<td>" + actionCell + "</td>" +
       "</tr>";
   }
   body.innerHTML = html;
+}
+
+function blockThreatIp(ip) {
+  if (!confirm(ip + " dauerhaft auf die Blacklist setzen?")) return;
+  adminApi("api/admin/threats/block", "POST", { ip: ip })
+    .then(function() {
+      showToast("IP gesperrt.");
+      loadSecurity();
+    })
+    .catch(function(err) {
+      showMsg("securityMsg", "Fehler: " + (err.message || err), "danger");
+    });
 }
 
 // ---------------------------------------------------------------- audit log

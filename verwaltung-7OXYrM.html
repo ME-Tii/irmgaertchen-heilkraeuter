@@ -656,7 +656,7 @@
             <button class="btn btn-outline-irm btn-sm" type="button" onclick="loadSecurity()"><i class="bi bi-arrow-clockwise"></i> Prüfen</button>
           </div>
         </div>
-        <p class="text-muted small mb-3">Regelbasierte Verdachtsanalyse des Protokolls (Brute-Force, Scanner, Admin-Probing u.a.). Bekannte IP-Zuordnungen werden berücksichtigt. Zusätzlich: Anonyme Zugriffe auf Admin-Pfade werden gedrosselt und bei 5 Treffern innerhalb von 10 Minuten dauerhaft automatisch gesperrt – im Blacklist-Test-Modus nur Bericht.</p>
+        <p class="text-muted small mb-3">Regelbasierte Verdachtsanalyse des Protokolls (Brute-Force, Scanner, Admin-Probing u.a.). Bekannte IP-Zuordnungen werden berücksichtigt. Zusätzlich: Anonyme Zugriffe auf Admin-Pfade werden gedrosselt und bei 5 Treffern innerhalb von 10 Minuten oder 15 Treffern innerhalb von 24 Stunden dauerhaft automatisch gesperrt – im Blacklist-Test-Modus nur Bericht. Befunde lassen sich per „Sperren“-Button manuell auf die Blacklist setzen.</p>
         <div id="securityMsg" class="alert d-none" role="alert"></div>
         <div class="table-responsive">
           <table class="table table-sm table-hover align-middle">
@@ -668,10 +668,11 @@
                 <th>Anzahl</th>
                 <th>Zeitraum</th>
                 <th>Details</th>
+                <th>Aktion</th>
               </tr>
             </thead>
             <tbody id="securityBody">
-              <tr><td colspan="6" class="text-muted text-center py-3">Noch nicht geprüft</td></tr>
+              <tr><td colspan="7" class="text-muted text-center py-3">Noch nicht geprüft</td></tr>
             </tbody>
           </table>
         </div>

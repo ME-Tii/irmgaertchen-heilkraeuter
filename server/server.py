@@ -226,14 +226,38 @@ def check_ip_blacklist():
 # ---------------------------------------------------------------- admin-path Schutz
 
 _ADMIN_PROBE_RATE = 20            # anonyme Requests je Minute auf Admin-Pfade
-_PROBE_BLOCK_THRESHOLD = 5        # Treffer im Fenster -> Auto-Block (dauerhaft)
+_PROBE_BLOCK_THRESHOLD = 5        # Treffer im 10-min-Fenster -> Auto-Block (dauerhaft)
 _PROBE_BLOCK_WINDOW = 10 * 60
+_PROBE_SLOW_THRESHOLD = 15       # Treffer in 24 h -> ebenfalls Auto-Block
+_PROBE_SLOW_WINDOW = 24 * 3600
 
 _probe_lock = threading.Lock()
-_probe_hits = {}
+_probe_hits = {}                  # ip -> [ts] (schnelles Fenster)
+_probe_hits_slow = {}             # ip -> [ts] (langes Fenster)
 
 _blocked_log_lock = threading.Lock()
 _blocked_log_last = {}            # ip -> letzter Protokoll-Eintrag (Epoch)
+
+
+def _auto_block_ip(ip):
+    """IP dauerhaft auf die Blacklist setzen (Test-Modus und gelabelte IPs ausgenommen)."""
+    try:
+        if db.is_blacklisted(ip):
+            return
+        labeled = {l["ip_address"] for l in db.get_ip_labels()}
+        if ip in labeled:
+            return
+        test_mode = db.get_setting("blacklist_test_mode", "0") == "1"
+        reason = "auto: Admin-Probing"
+        details = ("Häufige anonyme Zugriffe auf Admin-Pfade "
+                   f"(Schwelle: {_PROBE_BLOCK_THRESHOLD}/10 min oder {_PROBE_SLOW_THRESHOLD}/24 h)")
+        if not test_mode:
+            db.add_to_blacklist(ip, reason)
+        else:
+            reason += " (Test-Modus: nicht geblockt)"
+        _audit("auto_block", entity="ip", entity_id=ip, details=f"{reason} – {details}")
+    except Exception as e:
+        app.logger.error("Auto-Block fehlgeschlagen: %s", e)
 
 
 def _log_blocked_request_once(ip, path):
@@ -265,7 +289,7 @@ def _is_admin_sensitive_path(path):
 
 @app.before_request
 def protect_admin_paths():
-    global _probe_hits
+    global _probe_hits, _probe_hits_slow
     path = request.path
     if not _is_admin_sensitive_path(path):
         return
@@ -278,37 +302,33 @@ def protect_admin_paths():
     if not _rate_limit("adminprobe", _ADMIN_PROBE_RATE, 60):
         return err("Zu viele Anfragen. Bitte kurz warten.", 429)
 
-    # 2) Auto-Block: Schwelle erreicht -> dauerhaft auf die Blacklist
+    # 2) Auto-Block: schnelles ODER langsames Fenster ausgeloest -> dauerhaft sperren
+    triggered = False
     with _probe_lock:
         hits = [t for t in _probe_hits.get(ip, []) if now - t < _PROBE_BLOCK_WINDOW]
         hits.append(now)
         _probe_hits[ip] = hits
+
+        slow = [t for t in _probe_hits_slow.get(ip, []) if now - t < _PROBE_SLOW_WINDOW]
+        slow.append(now)
+        _probe_hits_slow[ip] = slow
+
         if len(_probe_hits) > 10000:
             cutoff = now - _PROBE_BLOCK_WINDOW
             _probe_hits = {k: v for k, v in _probe_hits.items() if v and v[-1] > cutoff}
-        triggered = len(hits) >= _PROBE_BLOCK_THRESHOLD
-        if triggered:
-            _probe_hits[ip] = []  # erst wieder pruefen, wenn das Fenster neu voll ist
+        if len(_probe_hits_slow) > 10000:
+            cutoff = now - _PROBE_SLOW_WINDOW
+            _probe_hits_slow = {k: v for k, v in _probe_hits_slow.items() if v and v[-1] > cutoff}
 
-    if not triggered:
-        return
-    try:
-        if db.is_blacklisted(ip):
-            return
-        labeled = {l["ip_address"] for l in db.get_ip_labels()}
-        if ip in labeled:
-            return
-        test_mode = db.get_setting("blacklist_test_mode", "0") == "1"
-        reason = "auto: Admin-Probing"
-        details = (f"{_PROBE_BLOCK_THRESHOLD}+ anonyme Zugriffe auf Admin-Pfade "
-                   f"innerhalb von {_PROBE_BLOCK_WINDOW // 60} Minuten")
-        if not test_mode:
-            db.add_to_blacklist(ip, reason)
-        else:
-            reason += " (Test-Modus: nicht geblockt)"
-        _audit("auto_block", entity="ip", entity_id=ip, details=f"{reason} – {details}")
-    except Exception as e:
-        app.logger.error("Auto-Block fehlgeschlagen: %s", e)
+        if len(hits) >= _PROBE_BLOCK_THRESHOLD:
+            _probe_hits[ip] = []      # erst wieder pruefen, wenn das Fenster neu voll ist
+            triggered = True
+        elif len(slow) >= _PROBE_SLOW_THRESHOLD:
+            _probe_hits_slow[ip] = []
+            triggered = True
+
+    if triggered:
+        _auto_block_ip(ip)
 
 
 # ---------------------------------------------------------------- audit logging
@@ -2026,6 +2046,24 @@ def admin_threats():
     except (TypeError, ValueError):
         hours = 24
     return jsonify({"findings": db.get_security_findings(hours), "hours": hours})
+
+
+@app.post("/api/admin/threats/block")
+def admin_threat_block():
+    admin_user = require_admin()
+    bad = _admin_ok(admin_user)
+    if bad:
+        return bad
+    data = request.get_json(force=True, silent=True) or {}
+    ip = (data.get("ip") or "").strip()
+    if not re.fullmatch(r"[0-9A-Za-z.:]{3,45}", ip or ""):
+        return err("Ungültige IP-Adresse.", 400)
+    if db.is_blacklisted(ip):
+        return jsonify({"ok": True, "already": True})
+    db.add_to_blacklist(ip, "manuell: Sicherheits-Monitor")
+    _audit("Blacklist-Eintrag erstellt", entity="ip", entity_id=ip,
+           details="Über den Sicherheits-Monitor gesperrt", user=admin_user)
+    return jsonify({"ok": True})
 
 
 @app.get("/api/admin/audit-log/export")
